@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "AI Music Discovery",
+    "slug": "ai-music-discovery-playlist",
+    "scheme": "aimusicplaylist",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "plugins": ["expo-dev-client"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.example.aimusicplaylist"
+    },
+    "android": {
+      "package": "com.example.aimusicplaylist"
+    }
+  }
+}

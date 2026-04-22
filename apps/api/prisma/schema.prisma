@@ -1,0 +1,224 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum SourcePlatform {
+  BILIBILI
+  DOUYIN
+}
+
+enum VerificationTaskStatus {
+  CREATED
+  PENDING_USER_ACTION
+  PENDING_CHECK
+  VERIFIED
+  REJECTED
+  EXPIRED
+  DISPUTED
+}
+
+enum PlaybackStatus {
+  PLAYABLE
+  BLOCKED
+  UNKNOWN
+}
+
+enum ImportStatus {
+  PENDING
+  READY
+  FAILED
+}
+
+enum PlaylistVisibility {
+  PRIVATE
+  PUBLIC
+}
+
+enum ContentType {
+  AI_ORIGINAL
+  AI_COVER
+  STYLE_REMIX
+  UNKNOWN
+}
+
+model User {
+  id           String     @id @default(uuid())
+  phoneOrEmail String     @unique @map("phone_or_email")
+  nickname     String
+  avatarUrl    String?    @map("avatar_url")
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  playlists           Playlist[]
+  favorites           Favorite[]
+  playHistory         PlayHistory[]
+  verificationTasks   ClaimOrVerificationTask[]
+
+  @@map("users")
+}
+
+model SourceAccount {
+  id                  String                 @id @default(uuid())
+  platform            SourcePlatform
+  platformAccountId   String                 @map("platform_account_id")
+  platformUniqueHandle String?               @map("platform_unique_handle")
+  displayName         String                 @map("display_name")
+  profileUrl          String?                @map("profile_url")
+  avatarUrl           String?                @map("avatar_url")
+  verificationStatus  VerificationTaskStatus @default(CREATED) @map("verification_status")
+  verifiedAt          DateTime?              @map("verified_at")
+  createdAt           DateTime               @default(now()) @map("created_at")
+
+  contents            SourceContent[]
+
+  @@unique([platform, platformAccountId])
+  @@index([platform, platformUniqueHandle])
+  @@map("source_accounts")
+}
+
+model SourceContent {
+  id                 String        @id @default(uuid())
+  platform           SourcePlatform
+  platformContentId  String        @map("platform_content_id")
+  canonicalUrl       String        @map("canonical_url")
+  title              String
+  coverUrl           String?       @map("cover_url")
+  authorNameSnapshot String?       @map("author_name_snapshot")
+  sourceAccountId    String?       @map("source_account_id")
+  durationSec        Int?          @map("duration_sec")
+  publishTime        DateTime?     @map("publish_time")
+  playableStatus     PlaybackStatus @default(UNKNOWN) @map("playable_status")
+  importStatus       ImportStatus  @default(PENDING) @map("import_status")
+  rawPayloadJson     Json?         @map("raw_payload_json")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  sourceAccount      SourceAccount? @relation(fields: [sourceAccountId], references: [id])
+  playlistItems      PlaylistItem[]
+  favorites          Favorite[]
+  playHistory        PlayHistory[]
+  contentMeta        ContentMeta?
+
+  @@unique([platform, platformContentId])
+  @@index([sourceAccountId])
+  @@index([createdAt])
+  @@map("source_contents")
+}
+
+model Playlist {
+  id          String             @id @default(uuid())
+  userId      String             @map("user_id")
+  name        String
+  coverUrl    String?            @map("cover_url")
+  description String?
+  visibility  PlaylistVisibility @default(PRIVATE)
+  isEditorial Boolean            @default(false) @map("is_editorial")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  user        User               @relation(fields: [userId], references: [id])
+  items       PlaylistItem[]
+
+  @@index([userId])
+  @@map("playlists")
+}
+
+model PlaylistItem {
+  id            String   @id @default(uuid())
+  playlistId    String   @map("playlist_id")
+  contentId     String   @map("content_id")
+  position      Int
+  addedByUserId String?  @map("added_by_user_id")
+  addedAt       DateTime @default(now()) @map("added_at")
+
+  playlist      Playlist @relation(fields: [playlistId], references: [id])
+  content       SourceContent @relation(fields: [contentId], references: [id])
+
+  @@unique([playlistId, contentId])
+  @@index([playlistId, position])
+  @@map("playlist_items")
+}
+
+model Favorite {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  contentId String   @map("content_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id])
+  content   SourceContent @relation(fields: [contentId], references: [id])
+
+  @@unique([userId, contentId])
+  @@index([userId, createdAt])
+  @@map("favorites")
+}
+
+model PlayHistory {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  contentId       String   @map("content_id")
+  playlistId      String?  @map("playlist_id")
+  playedAt        DateTime @default(now()) @map("played_at")
+  playStartSource String?  @map("play_start_source")
+  completionRatio Float?   @map("completion_ratio")
+  endReason       String?  @map("end_reason")
+
+  user            User     @relation(fields: [userId], references: [id])
+  content         SourceContent @relation(fields: [contentId], references: [id])
+
+  @@index([userId, playedAt])
+  @@index([contentId, playedAt])
+  @@map("play_history")
+}
+
+model ContentMeta {
+  id              String      @id @default(uuid())
+  contentId       String      @unique @map("content_id")
+  styleTags       String[]    @map("style_tags")
+  moodTags        String[]    @map("mood_tags")
+  contentType     ContentType @default(UNKNOWN) @map("content_type")
+  modelName       String?     @map("model_name")
+  shortNote       String?     @map("short_note")
+  metaSource      String?     @map("meta_source")
+  confidenceScore Float?      @map("confidence_score")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  content         SourceContent @relation(fields: [contentId], references: [id])
+
+  @@index([contentType])
+  @@map("content_meta")
+}
+
+model ClaimOrVerificationTask {
+  id                  String                 @id @default(uuid())
+  userId              String                 @map("user_id")
+  platform            SourcePlatform
+  targetAccountHint   String?                @map("target_account_hint")
+  verificationCode    String                 @map("verification_code")
+  verificationMethod  String                 @map("verification_method")
+  status              VerificationTaskStatus @default(CREATED)
+  submittedEvidenceJson Json?                @map("submitted_evidence_json")
+  reviewResult        String?                @map("review_result")
+  reviewedBy          String?                @map("reviewed_by")
+  expiresAt           DateTime               @map("expires_at")
+  completedAt         DateTime?              @map("completed_at")
+  createdAt           DateTime               @default(now()) @map("created_at")
+
+  user                User                   @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("claim_or_verification_tasks")
+}

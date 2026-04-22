@@ -1,0 +1,15 @@
+{
+  "extends": "../../packages/config/tsconfig.node.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "outDir": "dist",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "paths": {
+      "@ai-music-playlist/types": ["../../packages/types/src"],
+      "@ai-music-playlist/api-contract": ["../../packages/api-contract/src"],
+      "@ai-music-playlist/config": ["../../packages/config/src"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

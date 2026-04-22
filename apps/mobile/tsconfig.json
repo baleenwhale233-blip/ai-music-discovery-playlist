@@ -1,0 +1,13 @@
+{
+  "extends": "../../packages/config/tsconfig.react.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@ai-music-playlist/types": ["../../packages/types/src"],
+      "@ai-music-playlist/api-contract": ["../../packages/api-contract/src"],
+      "@ai-music-playlist/config": ["../../packages/config/src"]
+    }
+  },
+  "include": ["App.tsx", "src/**/*.ts", "src/**/*.tsx"]
+}

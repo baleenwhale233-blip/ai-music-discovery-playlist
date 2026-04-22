@@ -1,0 +1,39 @@
+{
+  "name": "@ai-music-playlist/mobile",
+  "private": true,
+  "version": "0.1.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "expo start --dev-client",
+    "web": "expo start --web",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "build": "expo export --platform all --output-dir dist",
+    "build:web": "expo export --platform web --output-dir dist-web",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~3.2.3",
+    "@ai-music-playlist/api-contract": "workspace:*",
+    "@ai-music-playlist/config": "workspace:*",
+    "@ai-music-playlist/types": "workspace:*",
+    "@babel/runtime": "^7.26.0",
+    "@react-navigation/bottom-tabs": "^6.6.1",
+    "@react-navigation/native": "^6.1.18",
+    "@react-navigation/native-stack": "^6.11.0",
+    "@tanstack/react-query": "^5.59.16",
+    "babel-preset-expo": "~11.0.14",
+    "expo": "~51.0.28",
+    "expo-dev-client": "~4.0.28",
+    "expo-status-bar": "~1.12.1",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-native": "0.74.5",
+    "react-native-safe-area-context": "4.10.5",
+    "react-native-web": "~0.19.13",
+    "react-native-screens": "~3.31.1",
+    "zustand": "^5.0.0"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "ai-music-discovery-playlist",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "dev:mobile": "turbo run dev --filter=@ai-music-playlist/mobile",
+    "dev:mobile:web": "pnpm --filter @ai-music-playlist/mobile web",
+    "dev:api": "turbo run dev --filter=@ai-music-playlist/api",
+    "dev:admin": "turbo run dev --filter=@ai-music-playlist/admin"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.14.0",
+    "@types/node": "^22.8.1",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "eslint": "^9.14.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.11.0",
+    "prettier": "^3.3.3",
+    "turbo": "^2.2.3",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.12.2",
+    "vitest": "^2.1.4"
+  }
+}
