@@ -549,3 +549,38 @@ pnpm dev:mobile:web
 - `pnpm typecheck`
 - `pnpm lint`
 - `pnpm build`
+
+---
+
+## 2026-04-23 00:50 CST
+
+### 本轮目标
+
+把技术路线、工程拆解和 AGENTS 文档统一到当前真实路线，避免后续 agent 继续按旧的 `React Native + iframe/WebView` 叙事开工。
+
+### 本轮完成
+
+- 重写技术路线文档：
+  - `docs/2026-04-22-mainland-mvp-technical-route.md`
+- 重写工程拆解文档：
+  - `docs/2026-04-22-mvp-engineering-breakdown.md`
+- 重写协作文档：
+  - `AGENTS.md`
+
+### 新的统一主叙事
+
+```text
+Mobile Web First
+-> Source Adapter
+-> 用户主动本地音频缓存
+-> 真播放器
+-> 听单
+```
+
+### 文档统一后的关键结论
+
+- `apps/admin` 当前承担 Web 原型和实验页，不再只是后台壳
+- `apps/api` 是当前主业务核心
+- `apps/mobile` 保留但后置
+- `/debug/bilibili` 是来源验证页，不再是主路线
+- `/debug/local-audio` 是当前最接近产品真实价值的实验页

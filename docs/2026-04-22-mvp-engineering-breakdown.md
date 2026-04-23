@@ -1,16 +1,28 @@
-# MVP 工程拆解清单
+# MVP 工程拆解清单 v0.2
 
 ## 1. 目标
 
-把当前仓库升级成可持续开发的 `pnpm + Turborepo` monorepo 基座，先建立工程边界、共享类型、环境变量与启动脚手架，不进入业务实现。
+把当前仓库从“原生 App 骨架优先”调整成：
 
-## 2. Monorepo 目录结构
+```text
+Mobile Web First + Conversion Node + Local Audio Playlist
+```
+
+也就是说，工程主线不再是 WebView 播放容器，而是：
+
+- 目录解析
+- 候选筛选
+- 本地音频缓存
+- 听单/播放单
+- 真实 `<audio>` 播放
+
+## 2. 当前目录角色
 
 ```text
 apps/
-  mobile/
-  api/
-  admin/
+  admin/   当前承担 Web 原型 + 后台壳
+  api/     主业务 API
+  mobile/  后置保留
 packages/
   types/
   api-contract/
@@ -19,95 +31,187 @@ infra/
 docs/
 ```
 
-## 3. 各目录职责
+## 3. 当前职责重定义
 
-- `apps/mobile`：React Native 客户端骨架，包含导航、Provider、状态层、API client 占位
-- `apps/api`：NestJS 服务端骨架，包含全局前缀、健康检查、auth 壳、Prisma / Redis / BullMQ 模块
-- `apps/admin`：Next.js 内部后台骨架，包含登录壳、布局壳和内容占位页
-- `packages/types`：统一领域类型与状态枚举
-- `packages/api-contract`：共享 DTO、请求响应 schema、模块前缀常量
-- `packages/config`：共享 tsconfig、eslint、prettier、env schema 与工程常量
-- `infra`：本地开发依赖，如 Postgres / Redis 的 docker compose
+### `apps/admin`
 
-## 4. Phase 拆解
+当前不只是“后台壳”，也是：
 
-### Phase 0：工程准备
+- 实验 Web 产品原型
+- 目录验证页
+- 本地音频实验页
+- 听单交互原型
 
-- 建立 workspace 与 turbo pipeline
-- 建立根 README、`.env.example`、`.gitignore`
-- 建立共享配置包与共享类型包
-- 输出技术路线文档与工程拆解文档
+### `apps/api`
 
-### Phase 1：三端骨架
+当前是核心业务承载层：
 
-- `mobile` 建立 Expo App、React Navigation、Query 与 Zustand Provider
-- `api` 建立 Nest 应用入口、全局前缀、健康检查、auth 壳、Prisma / Redis / Queue 模块
-- `admin` 建立 Next App Router、登录壳、首页壳
+- 来源解析
+- 目录预览
+- 本地音频缓存
+- 音频文件 Range 响应
+- 封面代理
+- 收藏夹/播放列表候选生成
 
-### Phase 2：工程规范与最小验证
+### `apps/mobile`
 
-- 统一 `lint / typecheck / test / build / dev`
-- Prisma schema 初版入仓
-- 共享类型在三端可被引用
-- `.env.example`、docker compose、开发说明到位
+当前只保留：
 
-## 5. 模块先建空壳的范围
+- 未来原生壳可能性
+- 未来播放器和账号体验的扩展空间
 
-建议本轮先建空壳：
+但**不是当前 MVP 主开发目标**。
 
-- `auth`
-- `health`
-- `contents`
-- `imports`
-- `playlists`
-- `favorites`
-- `history`
+## 4. 工程 Phase 拆解（更新）
+
+### Phase 0：基础工程
+
+- workspace
+- turbo pipeline
+- shared packages
+- README / AGENTS / development_log
+- 技术路线和产品文档同步
+
+### Phase 1：B 站单条本地音频验证
+
+- 单条链接解析
+- 元信息预览
+- 本地音频缓存接口
+- 本地封面接口
+- 原生 `<audio>` 播放
+- Range 支持
+
+### Phase 2：实验听单
+
+- 多首缓存组成播放单
+- 连续播放
+- 播放单移除/清空
+- 本地缓存清理
+
+### Phase 3：目录导入
+
+- 收藏夹/播放列表解析
+- 候选列表
+- 用户手动删除不相关内容
+- 批量缓存
+- 生成听单
+
+### Phase 4：Web 产品化
+
+- Mobile Web 首页
+- 发现页
+- 听单页
+- 最近缓存
+- 缓存失败与重试
+
+### Phase 5：来源扩展与灰度
+
+- YouTube 技术支持
+- 区域/版本露出控制
+- 实验来源开关
+
+## 5. 当前模块优先级
+
+### 高优先级
+
+- `apps/api/src/modules/contents/*`
+- `apps/admin/app/debug/local-audio/*`
+- `apps/admin/app/debug/bilibili/*`
+- `packages/api-contract`
+- `packages/types`
+
+### 中优先级
+
 - `discovery`
+- `playlists`
+- `history`
+- `favorites`
+
+### 低优先级 / 后置
+
+- `apps/mobile`
 - `source-accounts`
 - `moderation`
-- `admin`
-- `users`
+- `admin` 完整后台 CRUD
 
-这些模块先只做目录和边界，不做业务逻辑。
+## 6. 建议新增的正式领域对象
 
-## 6. 本轮不创建或不实现
+后续应从实验状态升级为正式模型：
 
-- `packages/ui`
-- B 站 / 抖音适配器实现
-- WebView 播放容器实现
-- 歌单、收藏、最近播放业务接口实现
-- 短信验证码真实接入
-- 运营配置真实 CRUD
+- `LocalAudioAsset`
+- `ConversionTask`
+- `Playlist`（听单语义）
+- `PlaylistItem`
+- `SourceCollectionPreview`
 
-## 7. 数据与基础设施最小顺序
+## 7. 基础设施优先级（更新）
 
-1. 先有 Prisma schema
-2. 再有 Redis / Queue 基础模块
-3. 再接业务模块
-4. 最后再接适配器与批量导入任务
+### 现在必须有
 
-## 8. 环境变量分层
+- PostgreSQL
+- API
+- 前端 Web
+- 本地缓存目录
 
-- 根目录：仅 workspace 级变量
-- `apps/api/.env.example`：数据库、Redis、端口、JWT、短信服务预留
-- `apps/mobile/.env.example`：API base URL、Sentry DSN 预留
-- `apps/admin/.env.example`：后台 base URL、内部登录预留
+### 现在可选
 
-## 9. CI 最小建议
+- Redis
+- BullMQ
 
-- 安装依赖
-- `pnpm lint`
+因为当前阶段很多实验功能可以先同步/串行完成。
+
+### 后面再做
+
+- 正式后台任务队列
+- 转换节点分离
+- 重试系统
+- 分布式缓存协调
+
+## 8. 转换节点策略
+
+### 当前推荐
+
+- 你的服务器或 Mac mini 作为转换节点
+
+### 架构建议
+
+```text
+Web / API
+-> 创建转换任务
+-> Conversion Node 执行 yt-dlp + ffmpeg
+-> 落地本地音频缓存
+-> API 返回音频地址
+```
+
+### 后续演进
+
+```text
+Cloud API + Self-hosted Mac mini worker
+```
+
+## 9. 当前不应该继续投入的方向
+
+- 来源 iframe 播放器增强
+- WebView 容器能力
+- 伪进度条 / 伪 pause-resume
+- 原生 App 首发分发
+
+## 10. 第一轮验收标准（更新）
+
+- `pnpm install`
 - `pnpm typecheck`
-- `pnpm test`
-- 后续再补 `pnpm build`
+- `pnpm lint`
+- `pnpm build`
+- B 站单条链接可解析
+- 本地音频实验页可打开
+- 本地音频接口支持 Range
+- 实验播放单可连续播放
+- 收藏夹/播放列表能解析候选目录
 
-## 10. 第一轮验收标准
+## 11. 下一阶段建议
 
-- 工作区可安装
-- `pnpm dev` 可拉起三端开发进程
-- `apps/api` 返回 `/api/v1/health`
-- `apps/mobile` 进入空白首页
-- `apps/admin` 进入后台首页
-- Prisma schema 可生成 client
-- Redis / BullMQ 连接配置可初始化
-- 共享类型可被三端引用
+下一轮工程目标建议是：
+
+1. 把实验播放单从页面内存迁到正式听单数据模型
+2. 把收藏夹/播放列表候选导入做成正式导入流程
+3. 把 `apps/admin` 中实验页逐步演进成 Mobile Web 正式前端
