@@ -1,6 +1,6 @@
 # AGENTS.md
 
-本文件是本项目的多代理协作约束、架构边界和交接协议。任何新对话里的 agent 在开始改动前，都应该先读完本文件，再读 `README.md` 和 `docs/development_log.md`。
+本文件是本项目的多代理协作约束、架构边界和交接协议。任何新对话里的 agent 在开始改动前，都应该先通读本文件一次，然后严格按第 2 节的恢复顺序继续，不要在 `AGENTS.md`、`README.md` 和 `docs/development_log.md` 之间来回重复确认同一个问题。
 
 ## 1. 项目目标
 
@@ -24,17 +24,18 @@ Mobile Web First
 
 ## 2. 开工前必读
 
-每个新 agent 在开始任何实现前，按这个顺序读：
+每个新 agent 在开始任何实现前，按这个顺序恢复上下文：
 
-1. `README.md`
-2. `docs/prd v0.1.md`
-3. `docs/basic_ia.md`
-4. `docs/2026-04-22-mainland-mvp-technical-route.md`
-5. `docs/2026-04-22-mvp-engineering-breakdown.md`
-6. `docs/development_log.md`
-7. 本文件 `AGENTS.md`
+1. 本文件 `AGENTS.md`
+2. `README.md`
+3. `docs/prd v0.1.md`
+4. `docs/basic_ia.md`
+5. `docs/2026-04-22-mainland-mvp-technical-route.md`
+6. `docs/2026-04-22-mvp-engineering-breakdown.md`
+7. `docs/development_log.md` 最近一节
+8. `git status --short`
 
-如果文档和当前代码不一致，以代码和 `docs/development_log.md` 最近一次记录为准，并在完成工作后修正文档。
+如果文档和当前代码不一致，以代码和 `docs/development_log.md` 最近一次记录为准；如果当前 worktree 明显比开发日志更往前，就把 `git status --short` 视为额外交接信息，并在完成工作后补写日志。
 
 ## 3. 当前路线判断
 
@@ -192,6 +193,7 @@ Mobile Web First
 - `pnpm build` 当前可通过
 - `open-bilibili-debug.command`：启动来源验证页
 - `open-local-audio-experiment.command`：启动本地音频实验页
+- `stop-local-audio-experiment.command`：停止本地音频实验相关服务
 
 ### 关于转换
 
@@ -229,15 +231,17 @@ Mobile Web First
 - 下一个最合理的动作
 
 如果新增了重要工程约束、目录边界或协作规则，也要同步更新本文件。
+如果当前代码已经明显走到 `docs/development_log.md` 最近一节之后，必须补一条新的交接记录，不要把下一位 agent 留在“代码领先文档”的状态里。
 
 ## 11. 下一位 agent 的默认起手式
 
 如果你是新进来的 agent，默认按这套方式开始：
 
-1. 读 `README.md`
-2. 读 `docs/development_log.md` 最近一节
-3. 跑 `git status --short`
-4. 先判断当前任务是不是应该落在：
+1. 严格按第 2 节顺序恢复上下文
+2. 先用一句话确认当前真实路线仍然是：
+   `目录 -> 用户主动本地缓存 -> 听单 -> 真播放器`
+3. 如果 `git status --short` 显示已有进行中的改动，把它们视为当前有效 WIP；除非与用户目标直接冲突，否则不要反复追问同一个路线问题
+4. 再判断当前任务是不是应该落在：
    - `apps/admin`
    - `apps/api`
    - `packages/*`

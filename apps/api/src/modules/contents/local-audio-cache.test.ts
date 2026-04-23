@@ -4,6 +4,7 @@ import {
   buildYtDlpAudioArgs,
   getLocalAudioCachePaths,
   parseHttpRange,
+  resolveCookiesFromBrowserArgs,
   toSafeCacheKey
 } from "./local-audio-cache";
 
@@ -26,11 +27,18 @@ describe("local audio cache helpers", () => {
   it("builds yt-dlp args for audio extraction without playlists", () => {
     const args = buildYtDlpAudioArgs({
       sourceUrl: "https://www.bilibili.com/video/BV1B7411m7LV",
-      outputTemplate: "/tmp/audio-cache/BV1B7411m7LV/audio.%(ext)s"
+      outputTemplate: "/tmp/audio-cache/BV1B7411m7LV/audio.%(ext)s",
+      cookieArgs: ["--cookies-from-browser", "safari"]
     });
 
     expect(args).toEqual([
       "--no-playlist",
+      "--referer",
+      "https://www.bilibili.com/",
+      "--user-agent",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      "--cookies-from-browser",
+      "safari",
       "--extract-audio",
       "--audio-format",
       "m4a",
@@ -43,6 +51,16 @@ describe("local audio cache helpers", () => {
       "/tmp/audio-cache/BV1B7411m7LV/audio.%(ext)s",
       "https://www.bilibili.com/video/BV1B7411m7LV"
     ]);
+  });
+
+  it("prefers the first available browser cookie source", () => {
+    expect(
+      resolveCookiesFromBrowserArgs([
+        { browser: "chrome", available: false },
+        { browser: "safari", available: true },
+        { browser: "edge", available: true }
+      ]),
+    ).toEqual(["--cookies-from-browser", "safari"]);
   });
 
   it("parses a bounded byte range", () => {

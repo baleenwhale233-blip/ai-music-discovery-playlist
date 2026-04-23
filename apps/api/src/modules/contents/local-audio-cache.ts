@@ -33,9 +33,30 @@ export function ensureAudioCacheDir(path: string) {
   mkdirSync(path, { recursive: true });
 }
 
-export function buildYtDlpAudioArgs(input: { sourceUrl: string; outputTemplate: string }) {
+export function buildYtDlpAudioArgs(input: {
+  sourceUrl: string;
+  outputTemplate: string;
+  cookieArgs?: string[];
+}) {
+  return buildYtDlpAudioArgsWithOptions({
+    sourceUrl: input.sourceUrl,
+    outputTemplate: input.outputTemplate,
+    cookieArgs: input.cookieArgs ?? []
+  });
+}
+
+export function buildYtDlpAudioArgsWithOptions(input: {
+  sourceUrl: string;
+  outputTemplate: string;
+  cookieArgs: string[];
+}) {
   return [
     "--no-playlist",
+    "--referer",
+    "https://www.bilibili.com/",
+    "--user-agent",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    ...input.cookieArgs,
     "--extract-audio",
     "--audio-format",
     "m4a",
@@ -48,6 +69,18 @@ export function buildYtDlpAudioArgs(input: { sourceUrl: string; outputTemplate: 
     input.outputTemplate,
     input.sourceUrl
   ];
+}
+
+export function resolveCookiesFromBrowserArgs(
+  candidates: Array<{ browser: string; available: boolean }>,
+) {
+  const match = candidates.find((candidate) => candidate.available);
+
+  if (!match) {
+    return [];
+  }
+
+  return ["--cookies-from-browser", match.browser];
 }
 
 export function findCachedAudioFile(itemDir: string) {

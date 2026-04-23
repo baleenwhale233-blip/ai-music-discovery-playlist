@@ -78,18 +78,48 @@ export const bilibiliFavoritePreviewRequestSchema = z.object({
 });
 
 export const bilibiliFavoritePreviewItemSchema = z.object({
+  id: z.string(),
   bvid: z.string(),
   title: z.string(),
   url: z.string(),
   coverUrl: z.string().nullable(),
   ownerName: z.string().nullable(),
-  durationSeconds: z.number().nullable()
+  durationSeconds: z.number().nullable(),
+  isExcluded: z.boolean()
 });
 
 export const bilibiliFavoritePreviewResponseSchema = z.object({
+  collectionId: z.string(),
   mediaId: z.string(),
   title: z.string().nullable(),
   items: z.array(bilibiliFavoritePreviewItemSchema)
+});
+
+export const experimentalPlaylistSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  kind: z.enum(["music", "learning", "mixed"]),
+  sourceType: z.enum(["manual", "imported_collection", "editorial"]),
+  itemCount: z.number(),
+  cachedItemCount: z.number()
+});
+
+export const experimentalPlaylistItemSchema = z.object({
+  id: z.string(),
+  sourceContentId: z.string(),
+  localAudioAssetId: z.string().nullable(),
+  position: z.number(),
+  title: z.string(),
+  coverUrl: z.string().nullable(),
+  durationSeconds: z.number().nullable(),
+  audioUrl: z.string().nullable(),
+  cacheKey: z.string().nullable(),
+  status: z.enum(["pending", "caching", "ready", "failed", "deleted"]).nullable()
+});
+
+export const experimentalPlaylistResponseSchema = z.object({
+  playlist: experimentalPlaylistSchema,
+  items: z.array(experimentalPlaylistItemSchema)
 });
 
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
@@ -103,3 +133,6 @@ export type LocalAudioCacheResponse = z.infer<typeof localAudioCacheResponseSche
 export type BilibiliFavoritePreviewRequest = z.infer<typeof bilibiliFavoritePreviewRequestSchema>;
 export type BilibiliFavoritePreviewItem = z.infer<typeof bilibiliFavoritePreviewItemSchema>;
 export type BilibiliFavoritePreviewResponse = z.infer<typeof bilibiliFavoritePreviewResponseSchema>;
+export type ExperimentalPlaylist = z.infer<typeof experimentalPlaylistSchema>;
+export type ExperimentalPlaylistItem = z.infer<typeof experimentalPlaylistItemSchema>;
+export type ExperimentalPlaylistResponse = z.infer<typeof experimentalPlaylistResponseSchema>;

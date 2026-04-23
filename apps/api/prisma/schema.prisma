@@ -14,7 +14,16 @@ enum UserStatus {
 
 enum SourcePlatform {
   BILIBILI
+  YOUTUBE
   DOUYIN
+  TIKTOK
+}
+
+enum SourceContentKind {
+  MUSIC_VIDEO
+  SHORT_VIDEO
+  TALK_VIDEO
+  UNKNOWN
 }
 
 enum VerificationTaskStatus {
@@ -27,7 +36,7 @@ enum VerificationTaskStatus {
   DISPUTED
 }
 
-enum PlaybackStatus {
+enum PlaybackAvailability {
   PLAYABLE
   BLOCKED
   UNKNOWN
@@ -44,6 +53,25 @@ enum PlaylistVisibility {
   PUBLIC
 }
 
+enum PlaylistKind {
+  MUSIC
+  LEARNING
+  MIXED
+}
+
+enum PlaylistSourceType {
+  MANUAL
+  IMPORTED_COLLECTION
+  EDITORIAL
+}
+
+enum SourceCollectionType {
+  FAVORITES
+  PLAYLIST
+  MEDIALIST
+  MANUAL
+}
+
 enum ContentType {
   AI_ORIGINAL
   AI_COVER
@@ -51,36 +79,75 @@ enum ContentType {
   UNKNOWN
 }
 
-model User {
-  id           String     @id @default(uuid())
-  phoneOrEmail String     @unique @map("phone_or_email")
-  nickname     String
-  avatarUrl    String?    @map("avatar_url")
-  status       UserStatus @default(ACTIVE)
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
+enum LocalAudioAssetStatus {
+  PENDING
+  CACHING
+  READY
+  FAILED
+  DELETED
+}
 
-  playlists           Playlist[]
-  favorites           Favorite[]
-  playHistory         PlayHistory[]
-  verificationTasks   ClaimOrVerificationTask[]
+enum LocalAudioStorageType {
+  SELF_HOSTED_NODE
+  CLOUD_TEMP
+  USER_DEVICE
+}
+
+enum ConversionTaskType {
+  CACHE_AUDIO
+  DELETE_AUDIO
+  REFRESH_METADATA
+  IMPORT_COLLECTION
+}
+
+enum ConversionTaskStatus {
+  CREATED
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
+enum ConversionRunnerType {
+  SELF_HOSTED_NODE
+  CLOUD_NODE
+  UNKNOWN
+}
+
+model User {
+  id                String                   @id @default(uuid())
+  phoneOrEmail      String                   @unique @map("phone_or_email")
+  nickname          String
+  avatarUrl         String?                  @map("avatar_url")
+  status            UserStatus               @default(ACTIVE)
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  updatedAt         DateTime                 @updatedAt @map("updated_at")
+
+  playlists         Playlist[]
+  sourceCollections SourceCollection[]
+  favorites         Favorite[]
+  playHistory       PlayHistory[]
+  localAudioAssets  LocalAudioAsset[]
+  conversionTasks   ConversionTask[]
+  verificationTasks ClaimOrVerificationTask[]
 
   @@map("users")
 }
 
 model SourceAccount {
-  id                  String                 @id @default(uuid())
-  platform            SourcePlatform
-  platformAccountId   String                 @map("platform_account_id")
-  platformUniqueHandle String?               @map("platform_unique_handle")
-  displayName         String                 @map("display_name")
-  profileUrl          String?                @map("profile_url")
-  avatarUrl           String?                @map("avatar_url")
-  verificationStatus  VerificationTaskStatus @default(CREATED) @map("verification_status")
-  verifiedAt          DateTime?              @map("verified_at")
-  createdAt           DateTime               @default(now()) @map("created_at")
+  id                   String                 @id @default(uuid())
+  platform             SourcePlatform
+  platformAccountId    String                 @map("platform_account_id")
+  platformUniqueHandle String?                @map("platform_unique_handle")
+  displayName          String                 @map("display_name")
+  profileUrl           String?                @map("profile_url")
+  avatarUrl            String?                @map("avatar_url")
+  verificationStatus   VerificationTaskStatus @default(CREATED) @map("verification_status")
+  verifiedAt           DateTime?              @map("verified_at")
+  createdAt            DateTime               @default(now()) @map("created_at")
 
-  contents            SourceContent[]
+  contents             SourceContent[]
 
   @@unique([platform, platformAccountId])
   @@index([platform, platformUniqueHandle])
@@ -88,76 +155,137 @@ model SourceAccount {
 }
 
 model SourceContent {
-  id                 String        @id @default(uuid())
-  platform           SourcePlatform
-  platformContentId  String        @map("platform_content_id")
-  canonicalUrl       String        @map("canonical_url")
-  title              String
-  coverUrl           String?       @map("cover_url")
-  authorNameSnapshot String?       @map("author_name_snapshot")
-  sourceAccountId    String?       @map("source_account_id")
-  durationSec        Int?          @map("duration_sec")
-  publishTime        DateTime?     @map("publish_time")
-  playableStatus     PlaybackStatus @default(UNKNOWN) @map("playable_status")
-  importStatus       ImportStatus  @default(PENDING) @map("import_status")
-  rawPayloadJson     Json?         @map("raw_payload_json")
-  createdAt          DateTime      @default(now()) @map("created_at")
-  updatedAt          DateTime      @updatedAt @map("updated_at")
+  id                  String               @id @default(uuid())
+  platform            SourcePlatform
+  platformContentId   String               @map("platform_content_id")
+  canonicalUrl        String               @map("canonical_url")
+  title               String
+  coverUrl            String?              @map("cover_url")
+  authorNameSnapshot  String?              @map("author_name_snapshot")
+  sourceAccountId     String?              @map("source_account_id")
+  contentKind         SourceContentKind    @default(UNKNOWN) @map("content_kind")
+  durationSec         Int?                 @map("duration_sec")
+  publishTime         DateTime?            @map("publish_time")
+  playableStatus      PlaybackAvailability @default(UNKNOWN) @map("playable_status")
+  importStatus        ImportStatus         @default(PENDING) @map("import_status")
+  rawPayloadJson      Json?                @map("raw_payload_json")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
 
-  sourceAccount      SourceAccount? @relation(fields: [sourceAccountId], references: [id])
-  playlistItems      PlaylistItem[]
-  favorites          Favorite[]
-  playHistory        PlayHistory[]
-  contentMeta        ContentMeta?
+  sourceAccount       SourceAccount?       @relation(fields: [sourceAccountId], references: [id])
+  collectionItems     SourceCollectionItem[]
+  playlistItems       PlaylistItem[]
+  favorites           Favorite[]
+  playHistory         PlayHistory[]
+  localAudioAssets    LocalAudioAsset[]
+  conversionTasks     ConversionTask[]
+  contentMeta         ContentMeta?
 
   @@unique([platform, platformContentId])
   @@index([sourceAccountId])
   @@index([createdAt])
+  @@index([platform, createdAt])
   @@map("source_contents")
 }
 
-model Playlist {
-  id          String             @id @default(uuid())
-  userId      String             @map("user_id")
-  name        String
-  coverUrl    String?            @map("cover_url")
-  description String?
-  visibility  PlaylistVisibility @default(PRIVATE)
-  isEditorial Boolean            @default(false) @map("is_editorial")
-  createdAt   DateTime           @default(now()) @map("created_at")
-  updatedAt   DateTime           @updatedAt @map("updated_at")
+model SourceCollection {
+  id                  String               @id @default(uuid())
+  userId              String               @map("user_id")
+  platform            SourcePlatform
+  collectionType      SourceCollectionType @map("collection_type")
+  platformCollectionId String              @map("platform_collection_id")
+  sourceUrl           String               @map("source_url")
+  title               String?
+  coverUrl            String?              @map("cover_url")
+  ownerNameSnapshot   String?              @map("owner_name_snapshot")
+  itemCountSnapshot   Int?                 @map("item_count_snapshot")
+  lastSyncedAt        DateTime?            @map("last_synced_at")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
 
-  user        User               @relation(fields: [userId], references: [id])
-  items       PlaylistItem[]
+  user                User                 @relation(fields: [userId], references: [id])
+  items               SourceCollectionItem[]
+  playlists           Playlist[]
+  conversionTasks     ConversionTask[]
+
+  @@unique([platform, platformCollectionId])
+  @@index([userId, createdAt])
+  @@map("source_collections")
+}
+
+model SourceCollectionItem {
+  id                 String           @id @default(uuid())
+  sourceCollectionId String           @map("source_collection_id")
+  sourceContentId    String           @map("source_content_id")
+  position           Int
+  isExcluded         Boolean          @default(false) @map("is_excluded")
+  exclusionReason    String?          @map("exclusion_reason")
+  createdAt          DateTime         @default(now()) @map("created_at")
+
+  sourceCollection   SourceCollection @relation(fields: [sourceCollectionId], references: [id])
+  sourceContent      SourceContent    @relation(fields: [sourceContentId], references: [id])
+
+  @@unique([sourceCollectionId, sourceContentId])
+  @@index([sourceCollectionId, position])
+  @@map("source_collection_items")
+}
+
+model Playlist {
+  id                 String             @id @default(uuid())
+  userId             String             @map("user_id")
+  sourceCollectionId String?            @map("source_collection_id")
+  name               String
+  coverUrl           String?            @map("cover_url")
+  description        String?
+  visibility         PlaylistVisibility @default(PRIVATE)
+  kind               PlaylistKind       @default(MUSIC)
+  sourceType         PlaylistSourceType @default(MANUAL) @map("source_type")
+  itemCount          Int?               @map("item_count")
+  cachedItemCount    Int?               @map("cached_item_count")
+  isEditorial        Boolean            @default(false) @map("is_editorial")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  user               User               @relation(fields: [userId], references: [id])
+  sourceCollection   SourceCollection?  @relation(fields: [sourceCollectionId], references: [id])
+  items              PlaylistItem[]
+  playHistory        PlayHistory[]
 
   @@index([userId])
+  @@index([sourceCollectionId])
   @@map("playlists")
 }
 
 model PlaylistItem {
-  id            String   @id @default(uuid())
-  playlistId    String   @map("playlist_id")
-  contentId     String   @map("content_id")
-  position      Int
-  addedByUserId String?  @map("added_by_user_id")
-  addedAt       DateTime @default(now()) @map("added_at")
+  id                 String           @id @default(uuid())
+  playlistId         String           @map("playlist_id")
+  sourceContentId    String           @map("source_content_id")
+  localAudioAssetId  String?          @map("local_audio_asset_id")
+  position           Int
+  titleSnapshot      String?          @map("title_snapshot")
+  coverUrlSnapshot   String?          @map("cover_url_snapshot")
+  durationSecSnapshot Int?            @map("duration_sec_snapshot")
+  addedByUserId      String?          @map("added_by_user_id")
+  addedAt            DateTime         @default(now()) @map("added_at")
 
-  playlist      Playlist @relation(fields: [playlistId], references: [id])
-  content       SourceContent @relation(fields: [contentId], references: [id])
+  playlist           Playlist         @relation(fields: [playlistId], references: [id])
+  sourceContent      SourceContent    @relation(fields: [sourceContentId], references: [id])
+  localAudioAsset    LocalAudioAsset? @relation(fields: [localAudioAssetId], references: [id])
 
-  @@unique([playlistId, contentId])
+  @@unique([playlistId, sourceContentId])
   @@index([playlistId, position])
+  @@index([localAudioAssetId])
   @@map("playlist_items")
 }
 
 model Favorite {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  contentId String   @map("content_id")
-  createdAt DateTime @default(now()) @map("created_at")
+  id                 String        @id @default(uuid())
+  userId             String        @map("user_id")
+  contentId          String        @map("content_id")
+  createdAt          DateTime      @default(now()) @map("created_at")
 
-  user      User     @relation(fields: [userId], references: [id])
-  content   SourceContent @relation(fields: [contentId], references: [id])
+  user               User          @relation(fields: [userId], references: [id])
+  content            SourceContent @relation(fields: [contentId], references: [id])
 
   @@unique([userId, contentId])
   @@index([userId, createdAt])
@@ -165,57 +293,122 @@ model Favorite {
 }
 
 model PlayHistory {
-  id              String   @id @default(uuid())
-  userId          String   @map("user_id")
-  contentId       String   @map("content_id")
-  playlistId      String?  @map("playlist_id")
-  playedAt        DateTime @default(now()) @map("played_at")
-  playStartSource String?  @map("play_start_source")
-  completionRatio Float?   @map("completion_ratio")
-  endReason       String?  @map("end_reason")
+  id                 String           @id @default(uuid())
+  userId             String           @map("user_id")
+  contentId          String           @map("content_id")
+  localAudioAssetId  String?          @map("local_audio_asset_id")
+  playlistId         String?          @map("playlist_id")
+  playedAt           DateTime         @default(now()) @map("played_at")
+  playStartSource    String?          @map("play_start_source")
+  completionRatio    Float?           @map("completion_ratio")
+  endReason          String?          @map("end_reason")
 
-  user            User     @relation(fields: [userId], references: [id])
-  content         SourceContent @relation(fields: [contentId], references: [id])
+  user               User             @relation(fields: [userId], references: [id])
+  content            SourceContent    @relation(fields: [contentId], references: [id])
+  localAudioAsset    LocalAudioAsset? @relation(fields: [localAudioAssetId], references: [id])
+  playlist           Playlist?        @relation(fields: [playlistId], references: [id])
 
   @@index([userId, playedAt])
   @@index([contentId, playedAt])
+  @@index([localAudioAssetId, playedAt])
   @@map("play_history")
 }
 
 model ContentMeta {
-  id              String      @id @default(uuid())
-  contentId       String      @unique @map("content_id")
-  styleTags       String[]    @map("style_tags")
-  moodTags        String[]    @map("mood_tags")
-  contentType     ContentType @default(UNKNOWN) @map("content_type")
-  modelName       String?     @map("model_name")
-  shortNote       String?     @map("short_note")
-  metaSource      String?     @map("meta_source")
-  confidenceScore Float?      @map("confidence_score")
-  updatedAt       DateTime    @updatedAt @map("updated_at")
+  id                String        @id @default(uuid())
+  contentId         String        @unique @map("content_id")
+  styleTags         String[]      @map("style_tags")
+  moodTags          String[]      @map("mood_tags")
+  contentType       ContentType   @default(UNKNOWN) @map("content_type")
+  modelName         String?       @map("model_name")
+  shortNote         String?       @map("short_note")
+  metaSource        String?       @map("meta_source")
+  confidenceScore   Float?        @map("confidence_score")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
 
-  content         SourceContent @relation(fields: [contentId], references: [id])
+  content           SourceContent @relation(fields: [contentId], references: [id])
 
   @@index([contentType])
   @@map("content_meta")
 }
 
-model ClaimOrVerificationTask {
-  id                  String                 @id @default(uuid())
-  userId              String                 @map("user_id")
-  platform            SourcePlatform
-  targetAccountHint   String?                @map("target_account_hint")
-  verificationCode    String                 @map("verification_code")
-  verificationMethod  String                 @map("verification_method")
-  status              VerificationTaskStatus @default(CREATED)
-  submittedEvidenceJson Json?                @map("submitted_evidence_json")
-  reviewResult        String?                @map("review_result")
-  reviewedBy          String?                @map("reviewed_by")
-  expiresAt           DateTime               @map("expires_at")
-  completedAt         DateTime?              @map("completed_at")
-  createdAt           DateTime               @default(now()) @map("created_at")
+model LocalAudioAsset {
+  id                String                @id @default(uuid())
+  userId            String                @map("user_id")
+  sourceContentId   String                @map("source_content_id")
+  cacheKey          String                @unique @map("cache_key")
+  storageType       LocalAudioStorageType @default(SELF_HOSTED_NODE) @map("storage_type")
+  relativeFilePath  String?               @map("relative_file_path")
+  coverRelativePath String?               @map("cover_relative_path")
+  mimeType          String?               @map("mime_type")
+  fileSizeBytes     Int?                  @map("file_size_bytes")
+  durationSec       Int?                  @map("duration_sec")
+  status            LocalAudioAssetStatus @default(PENDING)
+  lastError         String?               @map("last_error")
+  lastAccessedAt    DateTime?             @map("last_accessed_at")
+  deletedAt         DateTime?             @map("deleted_at")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
 
-  user                User                   @relation(fields: [userId], references: [id])
+  user              User                  @relation(fields: [userId], references: [id])
+  sourceContent     SourceContent         @relation(fields: [sourceContentId], references: [id])
+  playlistItems     PlaylistItem[]
+  playHistory       PlayHistory[]
+  conversionTasks   ConversionTask[]
+
+  @@unique([userId, sourceContentId])
+  @@index([userId, status])
+  @@index([sourceContentId, status])
+  @@map("local_audio_assets")
+}
+
+model ConversionTask {
+  id                String               @id @default(uuid())
+  userId            String               @map("user_id")
+  sourceContentId   String?              @map("source_content_id")
+  sourceCollectionId String?             @map("source_collection_id")
+  localAudioAssetId String?              @map("local_audio_asset_id")
+  taskType          ConversionTaskType   @map("task_type")
+  status            ConversionTaskStatus @default(CREATED)
+  runnerType        ConversionRunnerType @default(UNKNOWN) @map("runner_type")
+  runnerLabel       String?              @map("runner_label")
+  attempts          Int                  @default(0)
+  priority          Int                  @default(100)
+  errorMessage      String?              @map("error_message")
+  payloadJson       Json?                @map("payload_json")
+  startedAt         DateTime?            @map("started_at")
+  finishedAt        DateTime?            @map("finished_at")
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+
+  user              User                 @relation(fields: [userId], references: [id])
+  sourceContent     SourceContent?       @relation(fields: [sourceContentId], references: [id])
+  sourceCollection  SourceCollection?    @relation(fields: [sourceCollectionId], references: [id])
+  localAudioAsset   LocalAudioAsset?     @relation(fields: [localAudioAssetId], references: [id])
+
+  @@index([userId, status, createdAt])
+  @@index([sourceContentId, taskType])
+  @@index([sourceCollectionId, taskType])
+  @@index([localAudioAssetId, status])
+  @@map("conversion_tasks")
+}
+
+model ClaimOrVerificationTask {
+  id                   String                 @id @default(uuid())
+  userId               String                 @map("user_id")
+  platform             SourcePlatform
+  targetAccountHint    String?                @map("target_account_hint")
+  verificationCode     String                 @map("verification_code")
+  verificationMethod   String                 @map("verification_method")
+  status               VerificationTaskStatus @default(CREATED)
+  submittedEvidenceJson Json?                 @map("submitted_evidence_json")
+  reviewResult         String?                @map("review_result")
+  reviewedBy           String?                @map("reviewed_by")
+  expiresAt            DateTime               @map("expires_at")
+  completedAt          DateTime?              @map("completed_at")
+  createdAt            DateTime               @default(now()) @map("created_at")
+
+  user                 User                   @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([status])

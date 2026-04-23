@@ -326,7 +326,7 @@ pnpm dev:mobile:web
 
 - 新增了：
   - `open-bilibili-debug.command`
-  - `stop-bilibili-debug.command`
+  - `stop-local-audio-experiment.command`
 - 更新了 `README.md`
 - 更新了 `AGENTS.md`
 
@@ -344,7 +344,7 @@ pnpm dev:mobile:web
 
 ### 停止脚本行为
 
-`stop-bilibili-debug.command` 会根据 pid 文件停止刚才脚本启动的 API 和 admin 进程。
+`stop-local-audio-experiment.command` 会根据 pid 文件停止刚才脚本启动的 API 和 admin 进程。
 
 ---
 
@@ -584,3 +584,179 @@ Mobile Web First
 - `apps/mobile` 保留但后置
 - `/debug/bilibili` 是来源验证页，不再是主路线
 - `/debug/local-audio` 是当前最接近产品真实价值的实验页
+
+---
+
+## 2026-04-23 16:55 CST
+
+### 本轮目标
+
+把当前真实产品路线正式落进数据库骨架，先完成模型层而不急着进入迁移和业务写入逻辑。
+
+### 本轮完成
+
+- 重写了 `apps/api/prisma/schema.prisma`
+- 同步升级了 `packages/types/src/index.ts`
+- 为新的数据库领域常量补了测试
+
+### 当前数据库骨架包含的核心对象
+
+- `User`
+- `SourceAccount`
+- `SourceContent`
+- `SourceCollection`
+- `SourceCollectionItem`
+- `Playlist`
+- `PlaylistItem`
+- `Favorite`
+- `PlayHistory`
+- `ContentMeta`
+- `LocalAudioAsset`
+- `ConversionTask`
+- `ClaimOrVerificationTask`
+
+### 这次新增/强化的重点
+
+- `SourcePlatform` 扩展为：
+  - `BILIBILI`
+  - `YOUTUBE`
+  - `DOUYIN`
+  - `TIKTOK`
+- `SourceContent` 增加 `contentKind`
+- 新增 `SourceCollection / SourceCollectionItem` 用于收藏夹、播放列表和候选目录
+- `Playlist` 增加：
+  - `kind`
+  - `sourceType`
+  - `sourceCollectionId`
+  - `itemCount`
+  - `cachedItemCount`
+- `PlaylistItem` 增加：
+  - `localAudioAssetId`
+  - `titleSnapshot`
+  - `coverUrlSnapshot`
+  - `durationSecSnapshot`
+- 新增 `LocalAudioAsset`
+- 新增 `ConversionTask`
+- `PlayHistory` 现在可关联 `localAudioAsset`
+
+### 当前边界
+
+- 这轮只完成数据库 schema 和共享类型骨架
+- 还没有生成正式 migration
+- 还没有把实验页改成读写这些正式表
+- `Playlist` 目前仍是“听单语义的正式骨架”，不是完整业务层
+
+### 本轮实际验证结果
+
+以下命令已实际执行并通过：
+
+- `pnpm --filter @ai-music-playlist/types test src/index.test.ts`
+- `pnpm typecheck`
+- `pnpm --filter @ai-music-playlist/api prisma:generate`
+
+---
+
+## 2026-04-23 18:55 CST
+
+### 本轮目标
+
+把当前实验播放单从“页面内存状态”接进正式数据库骨架，先打通最小闭环：
+
+- 缓存一首歌时落库
+- 能从数据库读取实验听单
+- 能删除单个条目
+- 能清空听单
+
+### 本轮完成
+
+- 扩展了 `packages/api-contract`：
+  - `ExperimentalPlaylist`
+  - `ExperimentalPlaylistItem`
+  - `ExperimentalPlaylistResponse`
+- 新增了 `buildExperimentalPlaylistResponse` helper 和测试
+- `cacheBilibiliAudio(...)` 现在会在缓存成功后写入：
+  - `SourceContent`
+  - `LocalAudioAsset`
+  - `ConversionTask`
+  - `PlaylistItem`
+- 现在会自动保证存在一个实验用户和一个默认实验听单：
+  - `本地音频实验用户`
+  - `实验本地听单`
+- 新增读取实验听单接口：
+  - `GET /api/v1/contents/experimental/local-audio/playlist`
+- 新增删除单个听单条目接口：
+  - `DELETE /api/v1/contents/experimental/local-audio/playlist/items/:playlistItemId`
+- 新增清空实验听单接口：
+  - `DELETE /api/v1/contents/experimental/local-audio/playlist`
+- `apps/admin/app/debug/local-audio/page.tsx` 不再只依赖页面内存，而会：
+  - 初始读取实验听单
+  - 加入单曲后刷新听单
+  - 批量缓存后刷新听单
+  - 删除条目时刷新听单
+  - 清空听单时请求后端删除缓存并同步状态
+
+### 当前边界
+
+- 这仍然是实验听单，不是正式用户级歌单系统
+- 听单仍然只有一组默认实验听单，不支持多听单切换
+- 收藏夹解析候选列表当前仍然不持久化到 `SourceCollection` 表
+- 真正的持久化当前先落在：
+  - `SourceContent`
+  - `LocalAudioAsset`
+  - `Playlist`
+  - `PlaylistItem`
+  - `ConversionTask`
+
+### 本轮实际验证结果
+
+以下命令已实际执行并通过：
+
+- `pnpm --filter @ai-music-playlist/api-contract test src/index.test.ts`
+- `pnpm --filter @ai-music-playlist/api test src/modules/contents/experimental-playlist.test.ts`
+- `pnpm typecheck`
+- `pnpm lint`
+- `pnpm build`
+
+---
+
+## 2026-04-23 19:46 CST
+
+### 本轮目标
+
+收口协作文档，减少新对话里的 agent 因为起手顺序冲突、主路线叙事不一致和交接点不清而陷入重复确认。
+
+### 本轮完成
+
+- 重写了 `README.md` 开头和开发入口说明：
+  - 把主叙事统一为 `Mobile Web First -> 本地音频缓存 -> 真播放器 -> 听单`
+  - 明确 `/debug/local-audio` 是当前最接近真实产品价值的实验页
+  - 明确 `/debug/bilibili` 只是来源验证页
+  - 明确 `apps/mobile` 是后置保留，不是当前主前端
+- 收口了 `AGENTS.md` 的恢复顺序：
+  - 统一为 `AGENTS -> README -> PRD -> IA -> 技术路线 -> 工程拆解 -> development_log 最近一节 -> git status --short`
+  - 删除了原来“本文件先读”和“本文件最后读”并存造成的自相矛盾
+- 在 `AGENTS.md` 中补充了交接要求：
+  - 如果当前代码已经领先于 `docs/development_log.md`，本轮结束前必须补日志
+  - 如果 `git status --short` 显示已有 WIP，默认把它视为有效上下文，而不是围绕同一个路线问题循环追问
+
+### 影响目录
+
+- `README.md`
+- `AGENTS.md`
+- `docs/development_log.md`
+
+### 本轮实际验证结果
+
+以下命令已实际执行并通过：
+
+- `git diff --check -- README.md AGENTS.md docs/development_log.md`
+- `rg -n "当前真实路线|第 2 节|git status --short|/debug/local-audio|/debug/bilibili" README.md AGENTS.md docs/development_log.md`
+
+### 当前剩余问题
+
+- 当前 worktree 里仍然有一批尚未提交的 API / admin / shared package 改动，新的开发日志只补了“协作文档已收口”，还没有替这些业务改动额外生成独立交接说明
+- `README.md` 和 `AGENTS.md` 已经统一，但如果后续继续调整真实路线，仍然需要同步更新技术路线文档和开发日志最近一节
+
+### 下一个最合理的动作
+
+- 在下一轮业务改动结束后，补一条面向实际功能进度的 `docs/development_log.md` 记录，把当前 worktree 里的进行中状态也完整落盘

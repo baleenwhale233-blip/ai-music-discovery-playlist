@@ -4,6 +4,7 @@ import type {
   BilibiliParseResponse,
   BilibiliFavoritePreviewRequest,
   BilibiliFavoritePreviewResponse,
+  ExperimentalPlaylistResponse,
   LocalAudioCacheRequest,
   LocalAudioCacheResponse
 } from "@ai-music-playlist/api-contract";
@@ -27,6 +28,11 @@ export class ContentsController {
     return this.contentsService.previewBilibiliFavorite(body);
   }
 
+  @Delete("experimental/source-collections/items/:collectionItemId")
+  excludeSourceCollectionItem(@Param("collectionItemId") collectionItemId: string) {
+    return this.contentsService.excludeSourceCollectionItem(collectionItemId);
+  }
+
   @Get("debug/cover")
   async getBilibiliCover(
     @Query("url") url: string,
@@ -43,6 +49,11 @@ export class ContentsController {
   @Post("experimental/local-audio")
   cacheLocalAudio(@Body() body: LocalAudioCacheRequest): Promise<LocalAudioCacheResponse> {
     return this.contentsService.cacheBilibiliAudio(body);
+  }
+
+  @Get("experimental/local-audio/playlist")
+  getExperimentalPlaylist(): Promise<ExperimentalPlaylistResponse> {
+    return this.contentsService.getExperimentalPlaylist();
   }
 
   @Get("experimental/local-audio/:cacheKey/audio")
@@ -96,5 +107,15 @@ export class ContentsController {
   @Delete("experimental/local-audio/:cacheKey")
   deleteLocalAudio(@Param("cacheKey") cacheKey: string) {
     return this.contentsService.deleteCachedLocalAudio(cacheKey);
+  }
+
+  @Delete("experimental/local-audio/playlist")
+  clearExperimentalPlaylist() {
+    return this.contentsService.clearExperimentalPlaylist();
+  }
+
+  @Delete("experimental/local-audio/playlist/items/:playlistItemId")
+  removeExperimentalPlaylistItem(@Param("playlistItemId") playlistItemId: string) {
+    return this.contentsService.removeExperimentalPlaylistItem(playlistItemId);
   }
 }

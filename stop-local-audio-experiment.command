@@ -3,13 +3,13 @@
 set -euo pipefail
 
 PROJECT_DIR="/Users/yang/Documents/New project/ai-music-discovery-playlist"
-API_PID_FILE=".run/bilibili-debug-api.pid"
-ADMIN_PID_FILE=".run/bilibili-debug-admin.pid"
+API_PID_FILE=".run/local-audio-api.pid"
+ADMIN_PID_FILE=".run/local-audio-admin.pid"
 API_PORT="4000"
 ADMIN_PORT="3000"
 
 echo ""
-echo "AI Music Discovery: Stop Bilibili Debug Services"
+echo "AI Music Discovery: Stop Local Audio Experiment"
 echo ""
 
 cd "${PROJECT_DIR}"

@@ -1,21 +1,26 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   BilibiliFavoritePreviewItem,
   BilibiliFavoritePreviewResponse,
+  ExperimentalPlaylistResponse,
   LocalAudioCacheResponse
 } from "@ai-music-playlist/api-contract";
 
 import { adminEnv } from "../../../lib/env";
 
-type PlaylistItem = LocalAudioCacheResponse;
-
 function resolveApiAssetUrl(path: string) {
   return `${adminEnv.apiBaseUrl.replace(/\/api\/v1$/, "")}${path}`;
 }
 
-function getCoverUrl(item: LocalAudioCacheResponse | BilibiliFavoritePreviewItem | null) {
+function getCoverUrl(
+  item:
+    | LocalAudioCacheResponse
+    | BilibiliFavoritePreviewItem
+    | ExperimentalPlaylistResponse["items"][number]
+    | null,
+) {
   if (!item?.coverUrl) {
     return null;
   }
@@ -27,17 +32,33 @@ export default function LocalAudioExperimentPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [inputUrl, setInputUrl] = useState("");
   const [favoriteUrl, setFavoriteUrl] = useState("");
-  const [playlist, setPlaylist] = useState<PlaylistItem[]>([]);
+  const [playlistData, setPlaylistData] = useState<ExperimentalPlaylistResponse | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [favoritePreview, setFavoritePreview] = useState<BilibiliFavoritePreviewResponse | null>(null);
   const [status, setStatus] = useState("贴入一个 B 站链接，生成本地音频缓存后加入实验播放单。");
   const [isLoading, setIsLoading] = useState(false);
   const [isFavoriteLoading, setIsFavoriteLoading] = useState(false);
 
+  const playlist = playlistData?.items ?? [];
   const currentItem = playlist[currentIndex] ?? null;
   const coverUrl = getCoverUrl(currentItem);
 
   const selectedCandidates = useMemo(() => favoritePreview?.items ?? [], [favoritePreview]);
+
+  useEffect(() => {
+    void refreshPlaylist().catch(() => undefined);
+  }, []);
+
+  async function refreshPlaylist() {
+    const response = await fetch(`${adminEnv.apiBaseUrl}/contents/experimental/local-audio/playlist`);
+    const payload = (await response.json()) as ExperimentalPlaylistResponse | { message?: string };
+
+    if (!response.ok) {
+      throw new Error("message" in payload ? payload.message ?? "读取实验播放单失败" : "读取实验播放单失败");
+    }
+
+    setPlaylistData(payload as ExperimentalPlaylistResponse);
+  }
 
   async function cacheLink(url: string) {
     const response = await fetch(`${adminEnv.apiBaseUrl}/contents/experimental/local-audio`, {
@@ -69,10 +90,7 @@ export default function LocalAudioExperimentPage() {
 
     try {
       const item = await cacheLink(trimmed);
-      setPlaylist((current) => {
-        const exists = current.some((entry) => entry.cacheKey === item.cacheKey);
-        return exists ? current : [...current, item];
-      });
+      await refreshPlaylist();
       setCurrentIndex((index) => (playlist.length === 0 ? 0 : index));
       setInputUrl("");
       setStatus(`${item.title} 已加入实验播放单。`);
@@ -117,7 +135,11 @@ export default function LocalAudioExperimentPage() {
     }
   }
 
-  function handleRemoveCandidate(bvid: string) {
+  async function handleRemoveCandidate(collectionItemId: string) {
+    await fetch(`${adminEnv.apiBaseUrl}/contents/experimental/source-collections/items/${collectionItemId}`, {
+      method: "DELETE"
+    }).catch(() => undefined);
+
     setFavoritePreview((current) => {
       if (!current) {
         return current;
@@ -125,7 +147,7 @@ export default function LocalAudioExperimentPage() {
 
       return {
         ...current,
-        items: current.items.filter((item) => item.bvid !== bvid)
+        items: current.items.filter((item) => item.id !== collectionItemId)
       };
     });
   }
@@ -140,18 +162,14 @@ export default function LocalAudioExperimentPage() {
     setStatus("正在逐首生成本地音频缓存，请保持页面打开。");
 
     try {
-      const cachedItems: PlaylistItem[] = [];
+      const cachedItems: LocalAudioCacheResponse[] = [];
 
       for (const candidate of selectedCandidates) {
         setStatus(`正在缓存：${candidate.title}`);
         cachedItems.push(await cacheLink(candidate.url));
       }
 
-      setPlaylist((current) => {
-        const existingKeys = new Set(current.map((item) => item.cacheKey));
-        const nextItems = cachedItems.filter((item) => !existingKeys.has(item.cacheKey));
-        return [...current, ...nextItems];
-      });
+      await refreshPlaylist();
       setFavoritePreview(null);
       setStatus(`已加入 ${cachedItems.length} 首到实验播放单。`);
     } catch (error) {
@@ -162,21 +180,33 @@ export default function LocalAudioExperimentPage() {
   }
 
   async function handleClearPlaylist() {
-    await Promise.all(
-      playlist.map((item) =>
-        fetch(`${adminEnv.apiBaseUrl}/contents/experimental/local-audio/${item.cacheKey}`, {
-          method: "DELETE"
-        }).catch(() => undefined),
-      ),
-    );
+    await fetch(`${adminEnv.apiBaseUrl}/contents/experimental/local-audio/playlist`, {
+      method: "DELETE"
+    }).catch(() => undefined);
 
-    setPlaylist([]);
+    setPlaylistData((current) =>
+      current
+        ? {
+            ...current,
+            items: [],
+            playlist: {
+              ...current.playlist,
+              itemCount: 0,
+              cachedItemCount: 0
+            }
+          }
+        : null,
+    );
     setCurrentIndex(0);
     setStatus("已清空实验播放单，并请求删除本地音频缓存。");
   }
 
-  function handleRemovePlaylistItem(cacheKey: string) {
-    setPlaylist((current) => current.filter((item) => item.cacheKey !== cacheKey));
+  async function handleRemovePlaylistItem(playlistItemId: string) {
+    await fetch(`${adminEnv.apiBaseUrl}/contents/experimental/local-audio/playlist/items/${playlistItemId}`, {
+      method: "DELETE"
+    }).catch(() => undefined);
+
+    await refreshPlaylist();
     setCurrentIndex(0);
   }
 
@@ -257,7 +287,7 @@ export default function LocalAudioExperimentPage() {
                     {item.ownerName ?? "未知 UP"} / {item.durationSeconds ? `${item.durationSeconds} 秒` : "未知时长"}
                   </span>
                 </div>
-                <button onClick={() => handleRemoveCandidate(item.bvid)} style={buttonStyle("#fff", "#991b1b")}>
+                <button onClick={() => handleRemoveCandidate(item.id)} style={buttonStyle("#fff", "#991b1b")}>
                   删除
                 </button>
               </div>
@@ -289,9 +319,12 @@ export default function LocalAudioExperimentPage() {
               <div style={{ display: "grid", gap: 8, alignContent: "center" }}>
                 <p style={eyebrowStyle}>Now Playing</p>
                 <h2 style={{ margin: 0 }}>{currentItem.title}</h2>
-                <p style={{ margin: 0, color: "#475569" }}>BVID：{currentItem.bvid}</p>
+                <p style={{ margin: 0, color: "#475569" }}>缓存键：{currentItem.cacheKey ?? "未生成"}</p>
                 <p style={{ margin: 0, color: "#475569" }}>
                   {currentIndex + 1} / {playlist.length}
+                </p>
+                <p style={{ margin: 0, color: "#475569" }}>
+                  已缓存：{playlistData?.playlist.cachedItemCount ?? 0} / {playlistData?.playlist.itemCount ?? 0}
                 </p>
               </div>
             </div>
@@ -299,7 +332,7 @@ export default function LocalAudioExperimentPage() {
             <audio
               key={currentItem.cacheKey}
               ref={audioRef}
-              src={resolveApiAssetUrl(currentItem.audioUrl)}
+              src={currentItem.audioUrl ? resolveApiAssetUrl(currentItem.audioUrl) : ""}
               controls
               preload="metadata"
               onEnded={handleEnded}
@@ -325,7 +358,7 @@ export default function LocalAudioExperimentPage() {
               <button onClick={() => setCurrentIndex(index)} style={linkButtonStyle}>
                 {item.title}
               </button>
-              <button onClick={() => handleRemovePlaylistItem(item.cacheKey)} style={buttonStyle("#fff", "#991b1b")}>
+              <button onClick={() => handleRemovePlaylistItem(item.id)} style={buttonStyle("#fff", "#991b1b")}>
                 移除
               </button>
             </div>
