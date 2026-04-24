@@ -1498,3 +1498,54 @@ Mobile Web First
 
 - 推送当前分支到 GitHub。
 - 推送后继续规划 Alpha 账号体系：邮箱密码 + 邀请码优先，不急于接邮件验证码服务。
+
+---
+
+## 2026-04-25 00:40 CST
+
+### 本轮目标
+
+处理合并到 `main` 前的两个阻塞点：补 Prisma migration，并避免媒体 URL query 里的 `access_token` 被写进 API 日志。
+
+### 本轮完成
+
+- 新增 Prisma migration：
+  - `apps/api/prisma/migrations/20260425003000_web_first_local_audio/migration.sql`
+  - 从 `origin/main` 的 schema 到当前 Web First / Local Audio schema
+  - 手动把 Prisma 自动 diff 中会删列的部分改成保守迁移：
+    - `PlaybackStatus` 通过 `ALTER TYPE ... RENAME TO PlaybackAvailability` 保留旧值
+    - `playlist_items.content_id` 通过 `RENAME COLUMN` 迁到 `source_content_id`，避免丢已有 playlist item 关联
+- 调整 `.gitignore`，不再忽略正式 Prisma migrations。
+- 新增 `redactSensitiveUrl()`，对日志和错误响应里的 `access_token` query 做脱敏。
+- `RequestLoggingInterceptor` 和 `HttpExceptionFilter` 都改用脱敏 URL。
+- 新增 `redact-sensitive-url.test.ts` 覆盖相对 URL、绝对 URL、重复 `access_token` 参数。
+
+### 影响目录
+
+- `.gitignore`
+- `apps/api/prisma/migrations`
+- `apps/api/src/common/http`
+- `apps/api/src/common/interceptors`
+- `apps/api/src/common/filters`
+- `docs/development_log.md`
+
+### 本轮已执行验证
+
+- `pnpm --filter @ai-music-playlist/api test -- src/common/http/redact-sensitive-url.test.ts`
+- `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ai_music_playlist pnpm --filter @ai-music-playlist/api exec prisma validate --schema prisma/schema.prisma`
+- `git diff --check`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm test:local-audio-clean`
+- `pnpm verify:local-audio-clean`
+
+### 当前剩余问题
+
+- `pnpm test` 在无 Redis 权限的 sandbox 下仍会打印 `EPERM 127.0.0.1:6379` stderr，但测试任务通过。
+- 全量 `pnpm build` 的 mobile Expo export 父进程卡住问题仍未在本轮处理。
+
+### 下一个最合理的动作
+
+- 把本轮修复提交并推送到 `codex/web-first-formalization`。
+- 再次判断该分支是否可以合入 `main`。

@@ -19,4 +19,3 @@ android
 .DS_Store
 *.tsbuildinfo
 apps/api/src/generated
-apps/api/prisma/migrations

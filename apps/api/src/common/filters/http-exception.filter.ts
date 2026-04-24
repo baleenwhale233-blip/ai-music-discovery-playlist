@@ -7,6 +7,8 @@ import {
   Logger
 } from "@nestjs/common";
 
+import { redactSensitiveUrl } from "../http/redact-sensitive-url";
+
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
@@ -23,16 +25,17 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     const message =
       exception instanceof HttpException ? exception.message : "Internal server error";
+    const redactedUrl = redactSensitiveUrl(request.url);
 
     if (exception instanceof Error) {
-      this.logger.error(`${request.method} ${request.url} -> ${status} ${message}`, exception.stack);
+      this.logger.error(`${request.method} ${redactedUrl} -> ${status} ${message}`, exception.stack);
     } else {
-      this.logger.error(`${request.method} ${request.url} -> ${status} ${message}`);
+      this.logger.error(`${request.method} ${redactedUrl} -> ${status} ${message}`);
     }
 
     response.status(status).json({
       statusCode: status,
-      path: request.url,
+      path: redactedUrl,
       timestamp: new Date().toISOString(),
       message
     });

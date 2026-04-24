@@ -7,6 +7,8 @@ import {
 } from "@nestjs/common";
 import { Observable, tap } from "rxjs";
 
+import { redactSensitiveUrl } from "../http/redact-sensitive-url";
+
 @Injectable()
 export class RequestLoggingInterceptor implements NestInterceptor {
   private readonly logger = new Logger(RequestLoggingInterceptor.name);
@@ -18,7 +20,7 @@ export class RequestLoggingInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap(() => {
         const duration = Date.now() - startedAt;
-        this.logger.log(`${request.method} ${request.url} ${duration}ms`);
+        this.logger.log(`${request.method} ${redactSensitiveUrl(request.url)} ${duration}ms`);
       })
     );
   }
