@@ -1,0 +1,21 @@
+{
+  "name": "@ai-music-playlist/web",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev -p 3020",
+    "build": "next build",
+    "start": "next start -p 3020",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@ai-music-playlist/api-contract": "workspace:*",
+    "@ai-music-playlist/config": "workspace:*",
+    "@ai-music-playlist/types": "workspace:*",
+    "next": "^14.2.15",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  }
+}

@@ -1,21 +1,35 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import { spawn, spawnSync } from "node:child_process";
 import { accessSync, constants, createReadStream, existsSync, rmSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import {
   bilibiliFavoritePreviewRequestSchema,
   bilibiliParseRequestSchema,
   type ExperimentalPlaylistResponse,
+  importCacheRequestSchema,
+  importItemsUpdateRequestSchema,
+  importPreviewRequestSchema,
   localAudioCacheRequestSchema,
   type BilibiliFavoritePreviewRequest,
   type BilibiliFavoritePreviewResponse,
   type BilibiliParseRequest,
   type BilibiliParseResponse,
+  type ImportCacheRequest,
+  type ImportCacheResponse,
+  type ImportItemsUpdateRequest,
+  type ImportItemsUpdateResponse,
+  type ImportPreviewRequest,
+  type ImportPreviewResponse,
+  type LocalAudioPlaylistResponse,
   type LocalAudioCacheRequest,
-  type LocalAudioCacheResponse
+  type LocalAudioCacheResponse,
+  type SourceContentCacheResponse
 } from "@ai-music-playlist/api-contract";
+import { appEnv } from "../../config/env";
 import { PrismaService } from "../../platform/prisma/prisma.service";
+import { fetchBilibiliImportPreview } from "./bilibili-import-preview";
 import { buildExperimentalPlaylistResponse } from "./experimental-playlist";
+import { buildLocalAudioPlaylistResponse } from "./local-audio-playlist";
 
 import { normalizeBilibiliCoverUrl } from "./bilibili-cover";
 import { buildBilibiliFavoritePreviewResponse } from "./experimental-collection";
@@ -25,13 +39,19 @@ import {
   parseBilibiliLink
 } from "./bilibili-link.parser";
 import {
-  buildYtDlpAudioArgs,
+  buildFfmpegAudioExtractArgs,
+  BILIBILI_DESKTOP_USER_AGENT,
+  BILIBILI_MOBILE_USER_AGENT,
   ensureAudioCacheDir,
   findCachedAudioFile,
   findCachedCoverFile,
   getLocalAudioCachePaths,
+  listLocalAudioCacheKeys,
+  parseBilibiliMobileHtml5Playback,
+  readLocalAudioCacheMetadata,
   resolveCookiesFromBrowserArgs,
-  toSafeCacheKey
+  toSafeCacheKey,
+  writeLocalAudioCacheMetadata
 } from "./local-audio-cache";
 
 type BilibiliViewResponse = {
@@ -73,11 +93,355 @@ type BilibiliFavoriteResponse = {
 
 @Injectable()
 export class ContentsService {
-  private readonly localAudioCacheRoot = join(process.cwd(), ".local-audio-cache");
+  private readonly localAudioCacheRoot = isAbsolute(appEnv.LOCAL_AUDIO_CACHE_DIR)
+    ? appEnv.LOCAL_AUDIO_CACHE_DIR
+    : join(process.cwd(), appEnv.LOCAL_AUDIO_CACHE_DIR);
   private readonly experimentalUserEmail = "local-audio-experiment@system.local";
   private readonly experimentalPlaylistName = "实验本地听单";
+  private readonly localAudioPlaylistName = "我的本地听单";
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+
+  async previewImportForUser(
+    userId: string,
+    input: ImportPreviewRequest,
+  ): Promise<ImportPreviewResponse> {
+    const payload = importPreviewRequestSchema.parse(input);
+    const preview = await fetchBilibiliImportPreview({
+      url: payload.url,
+      limit: payload.limit,
+      fetchImpl: globalThis.fetch
+    });
+    const scopedCollectionId = `${userId}:${preview.mediaId}`;
+    const collection = await this.prisma.sourceCollection.upsert({
+      where: {
+        platform_platformCollectionId: {
+          platform: "BILIBILI",
+          platformCollectionId: scopedCollectionId
+        }
+      },
+      create: {
+        userId,
+        platform: "BILIBILI",
+        collectionType: preview.sourceType === "collection" ? "PLAYLIST" : "FAVORITES",
+        platformCollectionId: scopedCollectionId,
+        sourceUrl: payload.url,
+        title: preview.title,
+        itemCountSnapshot: preview.totalCount,
+        lastSyncedAt: new Date()
+      },
+      update: {
+        userId,
+        sourceUrl: payload.url,
+        title: preview.title,
+        itemCountSnapshot: preview.totalCount,
+        lastSyncedAt: new Date()
+      }
+    });
+
+    const responseItems = [];
+
+    for (const [index, item] of preview.items.entries()) {
+      const sourceContent = await this.prisma.sourceContent.upsert({
+        where: {
+          platform_platformContentId: {
+            platform: "BILIBILI",
+            platformContentId: item.bvid
+          }
+        },
+        create: {
+          platform: "BILIBILI",
+          platformContentId: item.bvid,
+          canonicalUrl: item.url,
+          title: item.title,
+          coverUrl: item.coverUrl,
+          authorNameSnapshot: item.ownerName,
+          contentKind: "MUSIC_VIDEO",
+          durationSec: item.durationSeconds,
+          playableStatus: "PLAYABLE",
+          importStatus: "READY"
+        },
+        update: {
+          canonicalUrl: item.url,
+          title: item.title,
+          coverUrl: item.coverUrl,
+          authorNameSnapshot: item.ownerName,
+          durationSec: item.durationSeconds,
+          playableStatus: "PLAYABLE",
+          importStatus: "READY"
+        }
+      });
+      const collectionItem = await this.prisma.sourceCollectionItem.upsert({
+        where: {
+          sourceCollectionId_sourceContentId: {
+            sourceCollectionId: collection.id,
+            sourceContentId: sourceContent.id
+          }
+        },
+        create: {
+          sourceCollectionId: collection.id,
+          sourceContentId: sourceContent.id,
+          position: index + 1,
+          isExcluded: item.isExcluded
+        },
+        update: {
+          position: index + 1,
+          isExcluded: item.isExcluded
+        }
+      });
+      const localAudioAsset = await this.prisma.localAudioAsset.findUnique({
+        where: {
+          userId_sourceContentId: {
+            userId,
+            sourceContentId: sourceContent.id
+          }
+        }
+      });
+
+      responseItems.push({
+        id: collectionItem.id,
+        sourceContentId: sourceContent.id,
+        bvid: item.bvid,
+        title: item.title,
+        url: item.url,
+        coverUrl: item.coverUrl,
+        ownerName: item.ownerName,
+        durationSeconds: item.durationSeconds,
+        isExcluded: collectionItem.isExcluded,
+        cacheStatus: this.mapLocalAudioAssetToImportStatus(localAudioAsset?.status ?? null)
+      });
+    }
+
+    return {
+      collectionId: collection.id,
+      mediaId: preview.mediaId,
+      title: preview.title,
+      sourceType: preview.sourceType,
+      totalCount: preview.totalCount,
+      items: responseItems
+    };
+  }
+
+  async updateImportItemsForUser(
+    userId: string,
+    collectionId: string,
+    input: ImportItemsUpdateRequest,
+  ): Promise<ImportItemsUpdateResponse> {
+    const payload = importItemsUpdateRequestSchema.parse(input);
+    const collection = await this.prisma.sourceCollection.findFirst({
+      where: {
+        id: collectionId,
+        userId
+      }
+    });
+
+    if (!collection) {
+      throw new BadRequestException("Source collection not found");
+    }
+
+    if (payload.excludedItemIds.length > 0) {
+      await this.prisma.sourceCollectionItem.updateMany({
+        where: {
+          sourceCollectionId: collection.id,
+          id: {
+            in: payload.excludedItemIds
+          }
+        },
+        data: {
+          isExcluded: true
+        }
+      });
+    }
+
+    return {
+      collectionId,
+      excludedItemIds: payload.excludedItemIds,
+      updatedCount: payload.excludedItemIds.length
+    };
+  }
+
+  async cacheImportItemsForUser(
+    userId: string,
+    collectionId: string,
+    input: ImportCacheRequest,
+  ): Promise<ImportCacheResponse> {
+    const payload = importCacheRequestSchema.parse(input);
+    const collection = await this.prisma.sourceCollection.findFirst({
+      where: {
+        id: collectionId,
+        userId
+      },
+      include: {
+        items: {
+          include: {
+            sourceContent: true
+          },
+          orderBy: {
+            position: "asc"
+          }
+        }
+      }
+    });
+
+    if (!collection) {
+      throw new BadRequestException("Source collection not found");
+    }
+
+    const itemIdSet = payload.itemIds ? new Set(payload.itemIds) : null;
+    const sourceContentIdSet = payload.sourceContentIds ? new Set(payload.sourceContentIds) : null;
+    const selectedItems = collection.items.filter((item) => {
+      if (item.isExcluded) {
+        return false;
+      }
+
+      if (itemIdSet && !itemIdSet.has(item.id)) {
+        return false;
+      }
+
+      if (sourceContentIdSet && !sourceContentIdSet.has(item.sourceContentId)) {
+        return false;
+      }
+
+      return true;
+    });
+    const playlistItemIds: string[] = [];
+    let cachedCount = 0;
+    let failedCount = 0;
+
+    for (const item of selectedItems) {
+      try {
+        const result = await this.cacheBilibiliAudioForUser(userId, {
+          url: item.sourceContent.canonicalUrl
+        });
+        playlistItemIds.push(result.playlistItemId);
+        cachedCount += 1;
+      } catch {
+        failedCount += 1;
+      }
+    }
+
+    return {
+      collectionId,
+      cachedCount,
+      failedCount,
+      playlistItemIds
+    };
+  }
+
+  async cacheSourceContentForUser(
+    userId: string,
+    sourceContentId: string,
+  ): Promise<SourceContentCacheResponse> {
+    const sourceContent = await this.prisma.sourceContent.findUnique({
+      where: {
+        id: sourceContentId
+      }
+    });
+
+    if (!sourceContent) {
+      throw new BadRequestException("Source content not found");
+    }
+
+    const result = await this.cacheBilibiliAudioForUser(userId, {
+      url: sourceContent.canonicalUrl
+    });
+
+    return {
+      sourceContentId: result.sourceContentId,
+      cacheKey: result.cacheKey,
+      audioUrl: result.audioUrl,
+      coverUrl: result.coverUrl,
+      status: result.status,
+      message: result.message
+    };
+  }
+
+  async getLocalAudioPlaylistForUser(userId: string): Promise<LocalAudioPlaylistResponse> {
+    const playlist = await this.ensureLocalAudioPlaylist(userId);
+    const playlistWithItems = await this.prisma.playlist.findUniqueOrThrow({
+      where: {
+        id: playlist.id
+      },
+      include: {
+        items: {
+          include: {
+            sourceContent: true,
+            localAudioAsset: true
+          }
+        }
+      }
+    });
+
+    return buildLocalAudioPlaylistResponse({
+      playlist: {
+        id: playlistWithItems.id,
+        name: playlistWithItems.name,
+        kind: playlistWithItems.kind,
+        sourceType: playlistWithItems.sourceType
+      },
+      items: playlistWithItems.items
+    });
+  }
+
+  async removeLocalAudioPlaylistItemForUser(userId: string, playlistItemId: string) {
+    const item = await this.prisma.playlistItem.findFirst({
+      where: {
+        id: playlistItemId,
+        playlist: {
+          userId
+        }
+      }
+    });
+
+    if (!item) {
+      throw new BadRequestException("Playlist item not found");
+    }
+
+    await this.prisma.playlistItem.delete({
+      where: {
+        id: item.id
+      }
+    });
+    await this.refreshPlaylistCounts(item.playlistId);
+
+    return {
+      id: playlistItemId,
+      deleted: true
+    };
+  }
+
+  async clearLocalAudioPlaylistForUser(userId: string) {
+    const playlist = await this.ensureLocalAudioPlaylist(userId);
+    const playlistWithItems = await this.prisma.playlist.findUniqueOrThrow({
+      where: {
+        id: playlist.id
+      },
+      include: {
+        items: {
+          include: {
+            localAudioAsset: true
+          }
+        }
+      }
+    });
+
+    for (const item of playlistWithItems.items) {
+      if (item.localAudioAsset?.cacheKey) {
+        await this.deleteCachedLocalAudioForUser(userId, item.localAudioAsset.cacheKey);
+      }
+    }
+
+    await this.prisma.playlistItem.deleteMany({
+      where: {
+        playlistId: playlist.id
+      }
+    });
+    await this.refreshPlaylistCounts(playlist.id);
+
+    return {
+      deleted: true
+    };
+  }
 
   async parseBilibiliLink(input: BilibiliParseRequest): Promise<BilibiliParseResponse> {
     const payload = bilibiliParseRequestSchema.parse(input);
@@ -172,8 +536,7 @@ export class ContentsService {
 
     const response = await fetch(sourceUrl, {
       headers: {
-        "user-agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "user-agent": BILIBILI_DESKTOP_USER_AGENT,
         referer: "https://www.bilibili.com/"
       }
     });
@@ -192,7 +555,6 @@ export class ContentsService {
   }
 
   async cacheBilibiliAudio(input: LocalAudioCacheRequest): Promise<LocalAudioCacheResponse> {
-    this.assertExecutableAvailable("yt-dlp");
     this.assertExecutableAvailable("ffmpeg");
 
     const payload = localAudioCacheRequestSchema.parse(input);
@@ -210,10 +572,13 @@ export class ContentsService {
 
     if (!audioFile) {
       cached = false;
-      await this.runYtDlp(buildYtDlpAudioArgs({
-        sourceUrl: parsed.normalizedUrl,
-        outputTemplate: paths.outputTemplate,
-        cookieArgs: this.getCookiesFromBrowserArgs()
+      const playUrl = await this.fetchBilibiliMobilePlayableUrl({
+        bvid: parsed.bvid,
+        page: parsed.page
+      });
+      await this.runFfmpeg(buildFfmpegAudioExtractArgs({
+        sourceUrl: playUrl,
+        outputAudioPath: paths.outputAudioPath
       }));
       audioFile = findCachedAudioFile(paths.itemDir);
     }
@@ -223,123 +588,142 @@ export class ContentsService {
     }
 
     const coverFile = findCachedCoverFile(paths.itemDir);
+    writeLocalAudioCacheMetadata({
+      metadataPath: paths.metadataPath,
+      metadata: {
+        cacheKey,
+        sourceUrl: parsed.sourceUrl,
+        normalizedUrl: parsed.normalizedUrl,
+        title: parsed.title,
+        bvid: parsed.bvid,
+        coverUrl: parsed.coverUrl,
+        durationSeconds: parsed.durationSeconds,
+        createdAt: new Date().toISOString()
+      }
+    });
 
-    const user = await this.ensureExperimentalUser();
-    const sourceContent = await this.prisma.sourceContent.upsert({
-      where: {
-        platform_platformContentId: {
-          platform: "BILIBILI",
-          platformContentId: parsed.bvid
-        }
-      },
-      create: {
-        platform: "BILIBILI",
-        platformContentId: parsed.bvid,
-        canonicalUrl: parsed.normalizedUrl,
-        title: parsed.title,
-        coverUrl: parsed.coverUrl,
-        authorNameSnapshot: parsed.ownerName,
-        contentKind: "MUSIC_VIDEO",
-        durationSec: parsed.durationSeconds,
-        playableStatus: "PLAYABLE",
-        importStatus: "READY"
-      },
-      update: {
-        canonicalUrl: parsed.normalizedUrl,
-        title: parsed.title,
-        coverUrl: parsed.coverUrl,
-        authorNameSnapshot: parsed.ownerName,
-        durationSec: parsed.durationSeconds,
-        playableStatus: "PLAYABLE",
-        importStatus: "READY"
-      }
-    });
-    const localAudioAsset = await this.prisma.localAudioAsset.upsert({
-      where: {
-        userId_sourceContentId: {
-          userId: user.id,
-          sourceContentId: sourceContent.id
-        }
-      },
-      create: {
-        userId: user.id,
-        sourceContentId: sourceContent.id,
-        cacheKey,
-        storageType: "SELF_HOSTED_NODE",
-        relativeFilePath: audioFile ? this.getRelativeCacheFilePath(paths.root, audioFile) : null,
-        coverRelativePath:
-          coverFile && coverFile.startsWith(paths.root)
-            ? this.getRelativeCacheFilePath(paths.root, coverFile)
-            : null,
-        mimeType: this.getAudioContentType(audioFile),
-        fileSizeBytes: statSync(audioFile).size,
-        durationSec: parsed.durationSeconds,
-        status: "READY",
-        lastAccessedAt: new Date()
-      },
-      update: {
-        cacheKey,
-        storageType: "SELF_HOSTED_NODE",
-        relativeFilePath: audioFile ? this.getRelativeCacheFilePath(paths.root, audioFile) : null,
-        coverRelativePath:
-          coverFile && coverFile.startsWith(paths.root)
-            ? this.getRelativeCacheFilePath(paths.root, coverFile)
-            : null,
-        mimeType: this.getAudioContentType(audioFile),
-        fileSizeBytes: statSync(audioFile).size,
-        durationSec: parsed.durationSeconds,
-        status: "READY",
-        lastError: null,
-        deletedAt: null,
-        lastAccessedAt: new Date()
-      }
-    });
-    await this.prisma.conversionTask.create({
-      data: {
-        userId: user.id,
-        sourceContentId: sourceContent.id,
-        localAudioAssetId: localAudioAsset.id,
-        taskType: "CACHE_AUDIO",
-        status: "SUCCEEDED",
-        runnerType: "SELF_HOSTED_NODE",
-        runnerLabel: "local-audio-experiment",
-        attempts: 1,
-        priority: 100,
-        payloadJson: {
-          sourceUrl: parsed.sourceUrl,
-          cacheKey
+    try {
+      const user = await this.ensureExperimentalUser();
+      const sourceContent = await this.prisma.sourceContent.upsert({
+        where: {
+          platform_platformContentId: {
+            platform: "BILIBILI",
+            platformContentId: parsed.bvid
+          }
         },
-        startedAt: new Date(),
-        finishedAt: new Date()
-      }
-    });
-    const playlist = await this.ensureExperimentalPlaylist(user.id);
-    const nextPosition = await this.getNextPlaylistPosition(playlist.id);
-    await this.prisma.playlistItem.upsert({
-      where: {
-        playlistId_sourceContentId: {
-          playlistId: playlist.id,
-          sourceContentId: sourceContent.id
+        create: {
+          platform: "BILIBILI",
+          platformContentId: parsed.bvid,
+          canonicalUrl: parsed.normalizedUrl,
+          title: parsed.title,
+          coverUrl: parsed.coverUrl,
+          authorNameSnapshot: parsed.ownerName,
+          contentKind: "MUSIC_VIDEO",
+          durationSec: parsed.durationSeconds,
+          playableStatus: "PLAYABLE",
+          importStatus: "READY"
+        },
+        update: {
+          canonicalUrl: parsed.normalizedUrl,
+          title: parsed.title,
+          coverUrl: parsed.coverUrl,
+          authorNameSnapshot: parsed.ownerName,
+          durationSec: parsed.durationSeconds,
+          playableStatus: "PLAYABLE",
+          importStatus: "READY"
         }
-      },
-      create: {
-        playlistId: playlist.id,
-        sourceContentId: sourceContent.id,
-        localAudioAssetId: localAudioAsset.id,
-        position: nextPosition,
-        titleSnapshot: parsed.title,
-        coverUrlSnapshot: parsed.coverUrl,
-        durationSecSnapshot: parsed.durationSeconds,
-        addedByUserId: user.id
-      },
-      update: {
-        localAudioAssetId: localAudioAsset.id,
-        titleSnapshot: parsed.title,
-        coverUrlSnapshot: parsed.coverUrl,
-        durationSecSnapshot: parsed.durationSeconds
+      });
+      const localAudioAsset = await this.prisma.localAudioAsset.upsert({
+        where: {
+          userId_sourceContentId: {
+            userId: user.id,
+            sourceContentId: sourceContent.id
+          }
+        },
+        create: {
+          userId: user.id,
+          sourceContentId: sourceContent.id,
+          cacheKey,
+          storageType: "SELF_HOSTED_NODE",
+          relativeFilePath: audioFile ? this.getRelativeCacheFilePath(paths.root, audioFile) : null,
+          coverRelativePath:
+            coverFile && coverFile.startsWith(paths.root)
+              ? this.getRelativeCacheFilePath(paths.root, coverFile)
+              : null,
+          mimeType: this.getAudioContentType(audioFile),
+          fileSizeBytes: statSync(audioFile).size,
+          durationSec: parsed.durationSeconds,
+          status: "READY",
+          lastAccessedAt: new Date()
+        },
+        update: {
+          cacheKey,
+          storageType: "SELF_HOSTED_NODE",
+          relativeFilePath: audioFile ? this.getRelativeCacheFilePath(paths.root, audioFile) : null,
+          coverRelativePath:
+            coverFile && coverFile.startsWith(paths.root)
+              ? this.getRelativeCacheFilePath(paths.root, coverFile)
+              : null,
+          mimeType: this.getAudioContentType(audioFile),
+          fileSizeBytes: statSync(audioFile).size,
+          durationSec: parsed.durationSeconds,
+          status: "READY",
+          lastError: null,
+          deletedAt: null,
+          lastAccessedAt: new Date()
+        }
+      });
+      await this.prisma.conversionTask.create({
+        data: {
+          userId: user.id,
+          sourceContentId: sourceContent.id,
+          localAudioAssetId: localAudioAsset.id,
+          taskType: "CACHE_AUDIO",
+          status: "SUCCEEDED",
+          runnerType: "SELF_HOSTED_NODE",
+          runnerLabel: "local-audio-experiment",
+          attempts: 1,
+          priority: 100,
+          payloadJson: {
+            sourceUrl: parsed.sourceUrl,
+            cacheKey
+          },
+          startedAt: new Date(),
+          finishedAt: new Date()
+        }
+      });
+      const playlist = await this.ensureExperimentalPlaylist(user.id);
+      const nextPosition = await this.getNextPlaylistPosition(playlist.id);
+      await this.prisma.playlistItem.upsert({
+        where: {
+          playlistId_sourceContentId: {
+            playlistId: playlist.id,
+            sourceContentId: sourceContent.id
+          }
+        },
+        create: {
+          playlistId: playlist.id,
+          sourceContentId: sourceContent.id,
+          localAudioAssetId: localAudioAsset.id,
+          position: nextPosition,
+          titleSnapshot: parsed.title,
+          coverUrlSnapshot: parsed.coverUrl,
+          durationSecSnapshot: parsed.durationSeconds,
+          addedByUserId: user.id
+        },
+        update: {
+          localAudioAssetId: localAudioAsset.id,
+          titleSnapshot: parsed.title,
+          coverUrlSnapshot: parsed.coverUrl,
+          durationSecSnapshot: parsed.durationSeconds
+        }
+      });
+      await this.refreshPlaylistCounts(playlist.id);
+    } catch (error) {
+      if (!this.isPrismaUnavailable(error)) {
+        throw error;
       }
-    });
-    await this.refreshPlaylistCounts(playlist.id);
+    }
 
     return {
       cacheKey,
@@ -565,8 +949,402 @@ export class ContentsService {
       rmSync(paths.itemDir, { recursive: true, force: true });
     }
 
+    try {
+      await this.prisma.localAudioAsset.updateMany({
+        where: {
+          cacheKey
+        },
+        data: {
+          status: "DELETED",
+          deletedAt: new Date()
+        }
+      });
+    } catch (error) {
+      if (!this.isPrismaUnavailable(error)) {
+        throw error;
+      }
+    }
+
+    return {
+      cacheKey,
+      deleted: true
+    };
+  }
+
+  async getExperimentalPlaylist(): Promise<ExperimentalPlaylistResponse> {
+    try {
+      const user = await this.ensureExperimentalUser();
+      const playlist = await this.ensureExperimentalPlaylist(user.id);
+      const playlistWithItems = await this.prisma.playlist.findUniqueOrThrow({
+        where: { id: playlist.id },
+        include: {
+          items: {
+            include: {
+              sourceContent: true,
+              localAudioAsset: true
+            }
+          }
+        }
+      });
+
+      return buildExperimentalPlaylistResponse({
+        playlist: {
+          id: playlistWithItems.id,
+          name: playlistWithItems.name,
+          kind: playlistWithItems.kind,
+          sourceType: playlistWithItems.sourceType
+        },
+        items: playlistWithItems.items
+      });
+    } catch (error) {
+      if (!this.isPrismaUnavailable(error)) {
+        throw error;
+      }
+
+      return this.getExperimentalPlaylistFromLocalCache();
+    }
+  }
+
+  async removeExperimentalPlaylistItem(playlistItemId: string) {
+    try {
+      const item = await this.prisma.playlistItem.findUnique({
+        where: { id: playlistItemId }
+      });
+
+      if (!item) {
+        throw new BadRequestException("Playlist item not found");
+      }
+
+      await this.prisma.playlistItem.delete({
+        where: { id: playlistItemId }
+      });
+
+      await this.refreshPlaylistCounts(item.playlistId);
+
+      return {
+        id: playlistItemId,
+        deleted: true
+      };
+    } catch (error) {
+      if (!this.isPrismaUnavailable(error)) {
+        throw error;
+      }
+
+      return this.deleteCachedLocalAudio(playlistItemId);
+    }
+  }
+
+  async clearExperimentalPlaylist() {
+    try {
+      const user = await this.ensureExperimentalUser();
+      const playlist = await this.prisma.playlist.findFirst({
+        where: {
+          userId: user.id,
+          name: this.experimentalPlaylistName
+        },
+        include: {
+          items: {
+            include: {
+              localAudioAsset: true
+            }
+          }
+        }
+      });
+
+      if (!playlist) {
+        return {
+          deleted: true
+        };
+      }
+
+      for (const item of playlist.items) {
+        if (item.localAudioAsset?.cacheKey) {
+          this.deleteCachedLocalAudio(item.localAudioAsset.cacheKey);
+        }
+      }
+
+      await this.prisma.playlistItem.deleteMany({
+        where: {
+          playlistId: playlist.id
+        }
+      });
+      await this.prisma.localAudioAsset.updateMany({
+        where: {
+          userId: user.id
+        },
+        data: {
+          status: "DELETED",
+          deletedAt: new Date()
+        }
+      });
+      await this.refreshPlaylistCounts(playlist.id);
+
+      return {
+        deleted: true
+      };
+    } catch (error) {
+      if (!this.isPrismaUnavailable(error)) {
+        throw error;
+      }
+
+      for (const cacheKey of listLocalAudioCacheKeys(this.localAudioCacheRoot)) {
+        const paths = getLocalAudioCachePaths({
+          cacheRoot: this.localAudioCacheRoot,
+          cacheKey
+        });
+
+        if (existsSync(paths.itemDir)) {
+          rmSync(paths.itemDir, { recursive: true, force: true });
+        }
+      }
+
+      return {
+        deleted: true
+      };
+    }
+  }
+
+  async getCachedLocalAudioForUser(userId: string, cacheKey: string) {
+    await this.assertLocalAudioAssetOwnedByUser(userId, cacheKey);
+    const paths = getLocalAudioCachePaths({
+      cacheRoot: this.getUserCacheRoot(userId),
+      cacheKey
+    });
+    const audioFile = findCachedAudioFile(paths.itemDir);
+
+    if (!audioFile || !existsSync(audioFile)) {
+      throw new BadRequestException("Local audio cache not found");
+    }
+
+    return {
+      filePath: audioFile,
+      stream: createReadStream(audioFile),
+      contentType: this.getAudioContentType(audioFile),
+      totalSize: statSync(audioFile).size
+    };
+  }
+
+  async getCachedLocalAudioRangeForUser(userId: string, cacheKey: string, range: { start: number; end: number }) {
+    const audio = await this.getCachedLocalAudioForUser(userId, cacheKey);
+
+    return {
+      ...audio,
+      stream: createReadStream(audio.filePath, {
+        start: range.start,
+        end: range.end
+      })
+    };
+  }
+
+  async getCachedLocalCoverForUser(userId: string, cacheKey: string) {
+    await this.assertLocalAudioAssetOwnedByUser(userId, cacheKey);
+    const paths = getLocalAudioCachePaths({
+      cacheRoot: this.getUserCacheRoot(userId),
+      cacheKey
+    });
+    const coverFile = findCachedCoverFile(paths.itemDir);
+
+    if (!coverFile || !existsSync(coverFile)) {
+      throw new BadRequestException("Local cover cache not found");
+    }
+
+    return {
+      stream: createReadStream(coverFile),
+      contentType: this.getCoverContentType(coverFile)
+    };
+  }
+
+  private async cacheBilibiliAudioForUser(userId: string, input: LocalAudioCacheRequest) {
+    this.assertExecutableAvailable("ffmpeg");
+
+    const payload = localAudioCacheRequestSchema.parse(input);
+    const parsed = await this.parseBilibiliLink({ url: payload.url });
+    const cacheKey = toSafeCacheKey(`${userId}_${parsed.bvid}`);
+    const paths = getLocalAudioCachePaths({
+      cacheRoot: this.getUserCacheRoot(userId),
+      cacheKey
+    });
+
+    ensureAudioCacheDir(paths.itemDir);
+
+    let audioFile = findCachedAudioFile(paths.itemDir);
+    let cached = true;
+
+    if (!audioFile) {
+      cached = false;
+      const playUrl = await this.fetchBilibiliMobilePlayableUrl({
+        bvid: parsed.bvid,
+        page: parsed.page
+      });
+      await this.runFfmpeg(buildFfmpegAudioExtractArgs({
+        sourceUrl: playUrl,
+        outputAudioPath: paths.outputAudioPath
+      }));
+      audioFile = findCachedAudioFile(paths.itemDir);
+    }
+
+    if (!audioFile) {
+      throw new BadRequestException("ffmpeg finished but no local audio file was found");
+    }
+
+    const coverFile = findCachedCoverFile(paths.itemDir);
+    writeLocalAudioCacheMetadata({
+      metadataPath: paths.metadataPath,
+      metadata: {
+        cacheKey,
+        sourceUrl: parsed.sourceUrl,
+        normalizedUrl: parsed.normalizedUrl,
+        title: parsed.title,
+        bvid: parsed.bvid,
+        coverUrl: parsed.coverUrl,
+        durationSeconds: parsed.durationSeconds,
+        createdAt: new Date().toISOString()
+      }
+    });
+
+    const sourceContent = await this.prisma.sourceContent.upsert({
+      where: {
+        platform_platformContentId: {
+          platform: "BILIBILI",
+          platformContentId: parsed.bvid
+        }
+      },
+      create: {
+        platform: "BILIBILI",
+        platformContentId: parsed.bvid,
+        canonicalUrl: parsed.normalizedUrl,
+        title: parsed.title,
+        coverUrl: parsed.coverUrl,
+        authorNameSnapshot: parsed.ownerName,
+        contentKind: "MUSIC_VIDEO",
+        durationSec: parsed.durationSeconds,
+        playableStatus: "PLAYABLE",
+        importStatus: "READY"
+      },
+      update: {
+        canonicalUrl: parsed.normalizedUrl,
+        title: parsed.title,
+        coverUrl: parsed.coverUrl,
+        authorNameSnapshot: parsed.ownerName,
+        durationSec: parsed.durationSeconds,
+        playableStatus: "PLAYABLE",
+        importStatus: "READY"
+      }
+    });
+    const localAudioAsset = await this.prisma.localAudioAsset.upsert({
+      where: {
+        userId_sourceContentId: {
+          userId,
+          sourceContentId: sourceContent.id
+        }
+      },
+      create: {
+        userId,
+        sourceContentId: sourceContent.id,
+        cacheKey,
+        storageType: "SELF_HOSTED_NODE",
+        relativeFilePath: this.getRelativeCacheFilePath(this.localAudioCacheRoot, audioFile),
+        coverRelativePath:
+          coverFile && coverFile.startsWith(this.localAudioCacheRoot)
+            ? this.getRelativeCacheFilePath(this.localAudioCacheRoot, coverFile)
+            : null,
+        mimeType: this.getAudioContentType(audioFile),
+        fileSizeBytes: statSync(audioFile).size,
+        durationSec: parsed.durationSeconds,
+        status: "READY",
+        lastAccessedAt: new Date()
+      },
+      update: {
+        cacheKey,
+        storageType: "SELF_HOSTED_NODE",
+        relativeFilePath: this.getRelativeCacheFilePath(this.localAudioCacheRoot, audioFile),
+        coverRelativePath:
+          coverFile && coverFile.startsWith(this.localAudioCacheRoot)
+            ? this.getRelativeCacheFilePath(this.localAudioCacheRoot, coverFile)
+            : null,
+        mimeType: this.getAudioContentType(audioFile),
+        fileSizeBytes: statSync(audioFile).size,
+        durationSec: parsed.durationSeconds,
+        status: "READY",
+        lastError: null,
+        deletedAt: null,
+        lastAccessedAt: new Date()
+      }
+    });
+
+    await this.prisma.conversionTask.create({
+      data: {
+        userId,
+        sourceContentId: sourceContent.id,
+        localAudioAssetId: localAudioAsset.id,
+        taskType: "CACHE_AUDIO",
+        status: "SUCCEEDED",
+        runnerType: "SELF_HOSTED_NODE",
+        runnerLabel: "api-local-audio-alpha",
+        attempts: 1,
+        priority: 100,
+        payloadJson: {
+          sourceUrl: parsed.sourceUrl,
+          cacheKey
+        },
+        startedAt: new Date(),
+        finishedAt: new Date()
+      }
+    });
+
+    const playlist = await this.ensureLocalAudioPlaylist(userId);
+    const nextPosition = await this.getNextPlaylistPosition(playlist.id);
+    const playlistItem = await this.prisma.playlistItem.upsert({
+      where: {
+        playlistId_sourceContentId: {
+          playlistId: playlist.id,
+          sourceContentId: sourceContent.id
+        }
+      },
+      create: {
+        playlistId: playlist.id,
+        sourceContentId: sourceContent.id,
+        localAudioAssetId: localAudioAsset.id,
+        position: nextPosition,
+        titleSnapshot: parsed.title,
+        coverUrlSnapshot: parsed.coverUrl,
+        durationSecSnapshot: parsed.durationSeconds,
+        addedByUserId: userId
+      },
+      update: {
+        localAudioAssetId: localAudioAsset.id,
+        titleSnapshot: parsed.title,
+        coverUrlSnapshot: parsed.coverUrl,
+        durationSecSnapshot: parsed.durationSeconds
+      }
+    });
+    await this.refreshPlaylistCounts(playlist.id);
+
+    return {
+      sourceContentId: sourceContent.id,
+      playlistItemId: playlistItem.id,
+      cacheKey,
+      audioUrl: `/api/v1/local-audio/${encodeURIComponent(cacheKey)}/audio`,
+      coverUrl: coverFile ? `/api/v1/local-audio/${encodeURIComponent(cacheKey)}/cover` : parsed.coverUrl,
+      status: "ready" as const,
+      message: cached ? "已找到本地音频缓存。" : "已生成本地音频缓存。"
+    };
+  }
+
+  private async deleteCachedLocalAudioForUser(userId: string, cacheKey: string) {
+    await this.assertLocalAudioAssetOwnedByUser(userId, cacheKey);
+    const paths = getLocalAudioCachePaths({
+      cacheRoot: this.getUserCacheRoot(userId),
+      cacheKey
+    });
+
+    if (existsSync(paths.itemDir)) {
+      rmSync(paths.itemDir, { recursive: true, force: true });
+    }
+
     await this.prisma.localAudioAsset.updateMany({
       where: {
+        userId,
         cacheKey
       },
       data: {
@@ -581,99 +1359,76 @@ export class ContentsService {
     };
   }
 
-  async getExperimentalPlaylist(): Promise<ExperimentalPlaylistResponse> {
-    const user = await this.ensureExperimentalUser();
-    const playlist = await this.ensureExperimentalPlaylist(user.id);
-    const playlistWithItems = await this.prisma.playlist.findUniqueOrThrow({
-      where: { id: playlist.id },
-      include: {
-        items: {
-          include: {
-            sourceContent: true,
-            localAudioAsset: true
-          }
+  private async assertLocalAudioAssetOwnedByUser(userId: string, cacheKey: string) {
+    const asset = await this.prisma.localAudioAsset.findFirst({
+      where: {
+        userId,
+        cacheKey,
+        status: {
+          not: "DELETED"
         }
       }
     });
 
-    return buildExperimentalPlaylistResponse({
+    if (!asset) {
+      throw new BadRequestException("Local audio cache not found");
+    }
+  }
+
+  private getUserCacheRoot(userId: string) {
+    return join(this.localAudioCacheRoot, toSafeCacheKey(userId));
+  }
+
+  private mapLocalAudioAssetToImportStatus(status: string | null) {
+    switch (status) {
+      case "READY":
+        return "cached" as const;
+      case "PENDING":
+      case "CACHING":
+        return "caching" as const;
+      case "FAILED":
+        return "failed" as const;
+      default:
+        return "uncached" as const;
+    }
+  }
+
+  private getExperimentalPlaylistFromLocalCache(): ExperimentalPlaylistResponse {
+    const items = listLocalAudioCacheKeys(this.localAudioCacheRoot)
+      .map((cacheKey, index) => {
+        const paths = getLocalAudioCachePaths({
+          cacheRoot: this.localAudioCacheRoot,
+          cacheKey
+        });
+        const metadata = readLocalAudioCacheMetadata(paths.metadataPath);
+        const audioFile = findCachedAudioFile(paths.itemDir);
+        const coverFile = findCachedCoverFile(paths.itemDir);
+
+        return {
+          id: cacheKey,
+          sourceContentId: cacheKey,
+          localAudioAssetId: null,
+          position: index + 1,
+          title: metadata?.title ?? cacheKey,
+          coverUrl: coverFile ? `/api/v1/contents/experimental/local-audio/${cacheKey}/cover` : metadata?.coverUrl ?? null,
+          durationSeconds: metadata?.durationSeconds ?? null,
+          audioUrl: audioFile ? `/api/v1/contents/experimental/local-audio/${cacheKey}/audio` : null,
+          cacheKey,
+          status: (audioFile ? "ready" : "failed") as "ready" | "failed"
+        };
+      })
+      .filter((item) => item.audioUrl);
+
+    return {
       playlist: {
-        id: playlistWithItems.id,
-        name: playlistWithItems.name,
-        kind: playlistWithItems.kind,
-        sourceType: playlistWithItems.sourceType
+        id: "local-cache-fallback",
+        name: this.experimentalPlaylistName,
+        kind: "music",
+        sourceType: "manual",
+        itemCount: items.length,
+        cachedItemCount: items.filter((item) => item.status === "ready").length
       },
-      items: playlistWithItems.items
-    });
-  }
-
-  async removeExperimentalPlaylistItem(playlistItemId: string) {
-    const item = await this.prisma.playlistItem.findUnique({
-      where: { id: playlistItemId }
-    });
-
-    if (!item) {
-      throw new BadRequestException("Playlist item not found");
-    }
-
-    await this.prisma.playlistItem.delete({
-      where: { id: playlistItemId }
-    });
-
-    await this.refreshPlaylistCounts(item.playlistId);
-
-    return {
-      id: playlistItemId,
-      deleted: true
-    };
-  }
-
-  async clearExperimentalPlaylist() {
-    const user = await this.ensureExperimentalUser();
-    const playlist = await this.prisma.playlist.findFirst({
-      where: {
-        userId: user.id,
-        name: this.experimentalPlaylistName
-      },
-      include: {
-        items: {
-          include: {
-            localAudioAsset: true
-          }
-        }
-      }
-    });
-
-    if (!playlist) {
-      return {
-        deleted: true
-      };
-    }
-
-    for (const item of playlist.items) {
-      if (item.localAudioAsset?.cacheKey) {
-        this.deleteCachedLocalAudio(item.localAudioAsset.cacheKey);
-      }
-    }
-
-    await this.prisma.playlistItem.deleteMany({
-      where: {
-        playlistId: playlist.id
-      }
-    });
-    await this.prisma.localAudioAsset.updateMany({
-      where: {
-        userId: user.id
-      },
-      data: {
-        status: "DELETED",
-        deletedAt: new Date()
-      }
-    });
-    await this.refreshPlaylistCounts(playlist.id);
-
-    return {
-      deleted: true
+      items
     };
   }
 
@@ -716,6 +1471,31 @@ export class ContentsService {
     });
   }
 
+  private async ensureLocalAudioPlaylist(userId: string) {
+    const existing = await this.prisma.playlist.findFirst({
+      where: {
+        userId,
+        name: this.localAudioPlaylistName
+      }
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    return this.prisma.playlist.create({
+      data: {
+        userId,
+        name: this.localAudioPlaylistName,
+        visibility: "PRIVATE",
+        kind: "MUSIC",
+        sourceType: "MANUAL",
+        itemCount: 0,
+        cachedItemCount: 0
+      }
+    });
+  }
+
   private async getNextPlaylistPosition(playlistId: string) {
     const lastItem = await this.prisma.playlistItem.findFirst({
       where: { playlistId },
@@ -748,6 +1528,18 @@ export class ContentsService {
     return filePath.replace(`${root}/`, "");
   }
 
+  private isPrismaUnavailable(error: unknown) {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    return (
+      error.name === "PrismaClientInitializationError" ||
+      error.message.includes("Environment variable not found: DATABASE_URL") ||
+      error.message.includes("Can't reach database server")
+    );
+  }
+
   private assertExecutableAvailable(command: string) {
     for (const candidate of [`/opt/homebrew/bin/${command}`, `/usr/local/bin/${command}`]) {
       try {
@@ -765,6 +1557,29 @@ export class ContentsService {
     if (check.status !== 0) {
       throw new BadRequestException(
         `${command} is required for this local audio experiment. Install it with: brew install yt-dlp ffmpeg`,
+      );
+    }
+  }
+
+  private async fetchBilibiliMobilePlayableUrl(input: { bvid: string; page: number }) {
+    const response = await fetch(`https://m.bilibili.com/video/${input.bvid}?p=${input.page}`, {
+      headers: {
+        "user-agent": BILIBILI_MOBILE_USER_AGENT,
+        referer: "https://m.bilibili.com/"
+      }
+    });
+
+    if (!response.ok) {
+      throw new BadRequestException(`Bilibili mobile page request failed with ${response.status}`);
+    }
+
+    const html = await response.text();
+
+    try {
+      return parseBilibiliMobileHtml5Playback({ html }).playUrl;
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : "Unable to resolve bilibili mobile play url",
       );
     }
   }
@@ -787,6 +1602,28 @@ export class ContentsService {
         }
 
         reject(new BadRequestException(stderr.join("").trim() || `yt-dlp exited with ${code}`));
+      });
+    });
+  }
+
+  private runFfmpeg(args: string[]) {
+    return new Promise<void>((resolve, reject) => {
+      const child = spawn("ffmpeg", args, {
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+      const stderr: string[] = [];
+
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderr.push(chunk.toString("utf8"));
+      });
+      child.on("error", (error) => reject(error));
+      child.on("close", (code) => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+
+        reject(new BadRequestException(stderr.join("").trim() || `ffmpeg exited with ${code}`));
       });
     });
   }

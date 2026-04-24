@@ -1,4 +1,17 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post, Query, Res, StreamableFile } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Inject,
+  Param,
+  Post,
+  Query,
+  Res,
+  StreamableFile,
+  UseGuards
+} from "@nestjs/common";
 import type {
   BilibiliParseRequest,
   BilibiliParseResponse,
@@ -6,15 +19,32 @@ import type {
   BilibiliFavoritePreviewResponse,
   ExperimentalPlaylistResponse,
   LocalAudioCacheRequest,
-  LocalAudioCacheResponse
+  LocalAudioCacheResponse,
+  SourceContentCacheResponse
 } from "@ai-music-playlist/api-contract";
 
+import type { AlphaAccessTokenPayload } from "../auth/alpha-auth";
+import { AlphaAuthGuard } from "../auth/alpha-auth.guard";
+import { CurrentAlphaUser } from "../auth/current-alpha-user.decorator";
 import { ContentsService } from "./contents.service";
 import { parseHttpRange } from "./local-audio-cache";
 
 @Controller("contents")
 export class ContentsController {
-  constructor(private readonly contentsService: ContentsService) {}
+  constructor(@Inject(ContentsService) private readonly contentsService: ContentsService) {
+    this.parseBilibili = this.parseBilibili.bind(this);
+    this.previewBilibiliFavorite = this.previewBilibiliFavorite.bind(this);
+    this.excludeSourceCollectionItem = this.excludeSourceCollectionItem.bind(this);
+    this.getBilibiliCover = this.getBilibiliCover.bind(this);
+    this.cacheLocalAudio = this.cacheLocalAudio.bind(this);
+    this.getExperimentalPlaylist = this.getExperimentalPlaylist.bind(this);
+    this.getLocalAudio = this.getLocalAudio.bind(this);
+    this.getLocalCover = this.getLocalCover.bind(this);
+    this.deleteLocalAudio = this.deleteLocalAudio.bind(this);
+    this.clearExperimentalPlaylist = this.clearExperimentalPlaylist.bind(this);
+    this.removeExperimentalPlaylistItem = this.removeExperimentalPlaylistItem.bind(this);
+    this.cacheSourceContent = this.cacheSourceContent.bind(this);
+  }
 
   @Post("debug/parse-bilibili")
   parseBilibili(@Body() body: BilibiliParseRequest): Promise<BilibiliParseResponse> {
@@ -49,6 +79,15 @@ export class ContentsController {
   @Post("experimental/local-audio")
   cacheLocalAudio(@Body() body: LocalAudioCacheRequest): Promise<LocalAudioCacheResponse> {
     return this.contentsService.cacheBilibiliAudio(body);
+  }
+
+  @Post(":sourceContentId/cache")
+  @UseGuards(AlphaAuthGuard)
+  cacheSourceContent(
+    @CurrentAlphaUser() user: AlphaAccessTokenPayload,
+    @Param("sourceContentId") sourceContentId: string,
+  ): Promise<SourceContentCacheResponse> {
+    return this.contentsService.cacheSourceContentForUser(user.userId, sourceContentId);
   }
 
   @Get("experimental/local-audio/playlist")

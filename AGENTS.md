@@ -41,7 +41,8 @@ Mobile Web First
 
 ### 主路线
 
-- `apps/admin` 当前承担 Web 原型 / 实验前端
+- `apps/web` 当前承担正式 Mobile Web 产品端
+- `apps/admin` 保留为后台壳 / debug / 实验前端
 - `apps/api` 承担来源解析、本地音频缓存、目录预览、播放器数据接口
 - `apps/mobile` 保留，但后置
 
@@ -74,7 +75,6 @@ Mobile Web First
 
 当前职责：
 
-- Mobile Web 原型
 - 实验页
 - 后台壳
 
@@ -82,10 +82,28 @@ Mobile Web First
 
 - `/debug/bilibili`
 - `/debug/local-audio`
+- `experiments/local-audio-clean-room` 提供单进程 clean-room 实验入口，用来绕开 Nest/Next 调试链路验证核心本地听单能力
 
 后续方向：
 
-- 从实验前端演进为正式 Mobile Web 产品前端
+- 保留后台、调试和内部运营入口，不再承载正式用户端主线
+
+### `apps/web`
+
+当前职责：
+
+- 正式 Mobile Web 产品入口
+- Alpha 登录
+- B 站链接导入
+- 候选筛选
+- 批量缓存
+- 本地听单与真实 `<audio>` 播放
+
+当前不做：
+
+- 不直接依赖 `experiments/local-audio-clean-room`
+- 不直接引用 `apps/admin` 或 `apps/api` 内部代码
+- 只通过 `packages/api-contract` 和 `/api/v1` 正式端点对接后端
 
 ### `apps/api`
 
@@ -122,7 +140,8 @@ Mobile Web First
 
 主要负责：
 
-- `apps/admin`
+- `apps/web`
+- 必要时维护 `apps/admin` debug / 后台入口
 - 必要时联动 `packages/types`、`packages/api-contract`
 
 工作原则：
@@ -194,11 +213,14 @@ Mobile Web First
 - `open-bilibili-debug.command`：启动来源验证页
 - `open-local-audio-experiment.command`：启动本地音频实验页
 - `stop-local-audio-experiment.command`：停止本地音频实验相关服务
+- `pnpm dev:local-audio-clean`：启动 clean-room 本地音频实验，默认打开 `http://127.0.0.1:3010`
+- `pnpm dev:web`：启动正式 Mobile Web 产品端，默认 `http://127.0.0.1:3020`
+
+建议使用 Node 22 LTS；仓库通过 `.nvmrc` 和 `.node-version` 固定默认版本。不要把 Node 25.3.0 作为日常验证环境。
 
 ### 关于转换
 
 - 当前本地音频实验依赖：
-  - `yt-dlp`
   - `ffmpeg`
 - 允许由你的服务器或 Mac mini 先承担转换
 - 不要求一开始做大规模云转码
@@ -212,7 +234,7 @@ Mobile Web First
    - 目录解析
    - 听单
    - 本地缓存
-   - Mobile Web 页面
+    - Mobile Web 页面
    - 转换节点
 3. 若涉及跨端契约，先改 `packages/*`
 4. 再改 `apps/*`

@@ -184,6 +184,27 @@ importers:
         specifier: ^5.0.0
         version: 5.0.12(@types/react@18.3.28)(react@18.2.0)
 
+  apps/web:
+    dependencies:
+      '@ai-music-playlist/api-contract':
+        specifier: workspace:*
+        version: link:../../packages/api-contract
+      '@ai-music-playlist/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@ai-music-playlist/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      next:
+        specifier: ^14.2.15
+        version: 14.2.35(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
+      react:
+        specifier: 18.2.0
+        version: 18.2.0
+      react-dom:
+        specifier: 18.2.0
+        version: 18.2.0(react@18.2.0)
+
   packages/api-contract:
     dependencies:
       zod:

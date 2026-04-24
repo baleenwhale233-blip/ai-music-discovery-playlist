@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Post } from "@nestjs/common";
+import { Body, Controller, HttpCode, Inject, Post } from "@nestjs/common";
 import type {
   AuthRequestCodeInput,
   AuthVerifyCodeInput,
@@ -9,7 +9,10 @@ import { AuthService } from "./auth.service";
 
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(@Inject(AuthService) private readonly authService: AuthService) {
+    this.requestCode = this.requestCode.bind(this);
+    this.verifyCode = this.verifyCode.bind(this);
+  }
 
   @Post("request-code")
   @HttpCode(202)
@@ -18,7 +21,7 @@ export class AuthController {
   }
 
   @Post("verify-code")
-  verifyCode(@Body() body: AuthVerifyCodeInput): AuthVerifyCodeResponse {
+  verifyCode(@Body() body: AuthVerifyCodeInput): Promise<AuthVerifyCodeResponse> {
     return this.authService.verifyCode(body);
   }
 }

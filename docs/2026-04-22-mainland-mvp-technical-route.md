@@ -8,7 +8,7 @@
 - 推荐后端：`NestJS + TypeScript`
 - 推荐数据库：`PostgreSQL`
 - 推荐缓存与队列：`Redis + BullMQ`
-- 推荐后台与实验前端：`Next.js`
+- 推荐正式 Web、后台与实验前端：`Next.js`
 - MVP 为什么这么选：
   - 需求验证阶段应优先降低分发和审核门槛
   - 真正的播放器能力来自 `<audio>` / media element，而不是来源 iframe
@@ -54,10 +54,13 @@
   - 本地听单
   - 真正的 `<audio>` 播放器
 - 不再把 WebView / iframe 作为主路线
-- `apps/admin` 当前承担：
+- `apps/web` 当前承担：
+  - 正式 Mobile Web 产品端
+  - Alpha 登录、导入候选、批量缓存、本地听单播放器
+- `apps/admin` 当前保留：
   - 后台壳
   - 实验验证页
-  - 后续可演进为正式 Web 产品原型
+  - debug 入口
 
 ## 4. 后端技术方案
 
@@ -240,7 +243,8 @@
 
 ## 12. 当前工程方向
 
-- `apps/admin`：当前承担后台壳 + 实验 Web 页
+- `apps/web`：承担正式 Mobile Web 产品端
+- `apps/admin`：保留后台壳 + 实验 Web 页
 - `apps/api`：承担解析、目录预览、本地缓存、音频/封面接口
 - `apps/mobile`：保留但后置
 

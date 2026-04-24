@@ -20,7 +20,8 @@ Mobile Web First + Conversion Node + Local Audio Playlist
 
 ```text
 apps/
-  admin/   当前承担 Web 原型 + 后台壳
+  web/     正式 Mobile Web 产品端
+  admin/   后台壳 + debug / 实验页
   api/     主业务 API
   mobile/  后置保留
 packages/
@@ -35,12 +36,23 @@ docs/
 
 ### `apps/admin`
 
-当前不只是“后台壳”，也是：
+当前保留：
 
-- 实验 Web 产品原型
+- 后台壳
 - 目录验证页
 - 本地音频实验页
 - 听单交互原型
+
+### `apps/web`
+
+当前承担正式产品端：
+
+- Alpha 登录
+- 导入 B 站链接
+- 候选筛选
+- 批量缓存
+- 本地听单
+- 真实 `<audio>` 播放器
 
 ### `apps/api`
 
@@ -98,6 +110,7 @@ docs/
 
 ### Phase 4：Web 产品化
 
+- 新增 `apps/web` 正式产品端
 - Mobile Web 首页
 - 发现页
 - 听单页
@@ -115,6 +128,7 @@ docs/
 ### 高优先级
 
 - `apps/api/src/modules/contents/*`
+- `apps/web/*`
 - `apps/admin/app/debug/local-audio/*`
 - `apps/admin/app/debug/bilibili/*`
 - `packages/api-contract`
@@ -214,4 +228,4 @@ Cloud API + Self-hosted Mac mini worker
 
 1. 把实验播放单从页面内存迁到正式听单数据模型
 2. 把收藏夹/播放列表候选导入做成正式导入流程
-3. 把 `apps/admin` 中实验页逐步演进成 Mobile Web 正式前端
+3. 让 `apps/web` 承接正式 Mobile Web，`apps/admin` 保留后台和 debug

@@ -5,6 +5,8 @@ import {
   experimentalPlaylistResponseSchema,
   authVerifyCodeResponseSchema,
   bilibiliFavoritePreviewResponseSchema,
+  importPreviewResponseSchema,
+  localAudioPlaylistResponseSchema,
   modulePrefixes
 } from "./index";
 
@@ -80,5 +82,62 @@ describe("api-contract package", () => {
 
     expect(parsed.collectionId).toBe("collection-1");
     expect(parsed.items[0]?.isExcluded).toBe(false);
+  });
+
+  it("keeps the formal import preview response contract", () => {
+    const parsed = importPreviewResponseSchema.parse({
+      collectionId: "collection-1",
+      mediaId: "3960775205",
+      title: "歌单？",
+      sourceType: "playlist",
+      totalCount: 123,
+      items: [
+        {
+          id: "collection-item-1",
+          sourceContentId: "content-1",
+          bvid: "BV1B7411m7LV",
+          title: "Song 1",
+          url: "https://www.bilibili.com/video/BV1B7411m7LV",
+          coverUrl: "/api/v1/contents/debug/cover?url=https%3A%2F%2Fi0.hdslb.com%2Fcover.jpg",
+          ownerName: "UP",
+          durationSeconds: 120,
+          isExcluded: false,
+          cacheStatus: "uncached"
+        }
+      ]
+    });
+
+    expect(parsed.totalCount).toBe(123);
+    expect(parsed.items[0]?.cacheStatus).toBe("uncached");
+    expect(modulePrefixes.imports).toBe("imports");
+  });
+
+  it("keeps the formal local audio playlist response contract", () => {
+    const parsed = localAudioPlaylistResponseSchema.parse({
+      playlist: {
+        id: "playlist-1",
+        name: "我的本地听单",
+        kind: "music",
+        sourceType: "manual",
+        itemCount: 1,
+        cachedItemCount: 1
+      },
+      items: [
+        {
+          id: "playlist-item-1",
+          sourceContentId: "content-1",
+          localAudioAssetId: "asset-1",
+          position: 1,
+          title: "Song 1",
+          coverUrl: "/api/v1/local-audio/BV1B7411m7LV/cover",
+          durationSeconds: 120,
+          audioUrl: "/api/v1/local-audio/BV1B7411m7LV/audio",
+          cacheKey: "BV1B7411m7LV",
+          status: "ready"
+        }
+      ]
+    });
+
+    expect(parsed.items[0]?.audioUrl).toContain("/api/v1/local-audio/");
   });
 });

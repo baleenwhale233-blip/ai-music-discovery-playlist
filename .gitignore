@@ -4,6 +4,7 @@ node_modules
 .logs
 .run
 .local-audio-cache
+.local-audio-clean-room-cache
 .turbo
 dist
 dist-web

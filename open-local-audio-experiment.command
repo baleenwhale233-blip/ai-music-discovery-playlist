@@ -7,7 +7,7 @@ API_PORT="4000"
 ADMIN_PORT="3000"
 HEALTH_URL="http://127.0.0.1:${API_PORT}/api/v1/health"
 DEBUG_URL="http://127.0.0.1:${ADMIN_PORT}/debug/local-audio"
-EXPECTED_MARKER="Experimental Local Audio v1"
+EXPECTED_MARKER="Experimental Local Playlist v1"
 CHECK_ONLY="${1:-}"
 
 LOG_DIR=".logs"

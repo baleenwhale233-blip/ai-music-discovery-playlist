@@ -1,12 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildFfmpegAudioExtractArgs,
   buildYtDlpAudioArgs,
+  BILIBILI_DESKTOP_USER_AGENT,
+  BILIBILI_MOBILE_USER_AGENT,
   getLocalAudioCachePaths,
+  listLocalAudioCacheKeys,
+  parseBilibiliMobileHtml5Playback,
   parseHttpRange,
+  readLocalAudioCacheMetadata,
   resolveCookiesFromBrowserArgs,
-  toSafeCacheKey
+  toSafeCacheKey,
+  writeLocalAudioCacheMetadata
 } from "./local-audio-cache";
+import { mkdtempSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 describe("local audio cache helpers", () => {
   it("creates stable safe cache keys from bvid", () => {
@@ -22,6 +32,7 @@ describe("local audio cache helpers", () => {
 
     expect(paths.itemDir).toBe("/tmp/audio-cache/BV1B7411m7LV");
     expect(paths.outputTemplate).toBe("/tmp/audio-cache/BV1B7411m7LV/audio.%(ext)s");
+    expect(paths.outputAudioPath).toBe("/tmp/audio-cache/BV1B7411m7LV/audio.m4a");
   });
 
   it("builds yt-dlp args for audio extraction without playlists", () => {
@@ -36,7 +47,7 @@ describe("local audio cache helpers", () => {
       "--referer",
       "https://www.bilibili.com/",
       "--user-agent",
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      BILIBILI_DESKTOP_USER_AGENT,
       "--cookies-from-browser",
       "safari",
       "--extract-audio",
@@ -51,6 +62,84 @@ describe("local audio cache helpers", () => {
       "/tmp/audio-cache/BV1B7411m7LV/audio.%(ext)s",
       "https://www.bilibili.com/video/BV1B7411m7LV"
     ]);
+  });
+
+  it("builds ffmpeg args for direct mobile page extraction", () => {
+    const args = buildFfmpegAudioExtractArgs({
+      sourceUrl: "https://example.com/audio-video.mp4",
+      outputAudioPath: "/tmp/audio-cache/BV1B7411m7LV/audio.m4a"
+    });
+
+    expect(args).toEqual([
+      "-y",
+      "-headers",
+      `Referer: https://m.bilibili.com/\r\nUser-Agent: ${BILIBILI_MOBILE_USER_AGENT}\r\n`,
+      "-i",
+      "https://example.com/audio-video.mp4",
+      "-vn",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "192k",
+      "/tmp/audio-cache/BV1B7411m7LV/audio.m4a"
+    ]);
+  });
+
+  it("extracts a direct playback url from bilibili mobile html", () => {
+    const html = `
+      <script>
+        window.__INITIAL_STATE__={"video":{"viewInfo":{"cid":168325345,"title":"demo title","pic":"https://example.com/cover.jpg"},"playUrlInfo":[{"url":"https://example.com/media.mp4","length":1234,"size":5678}]}}
+      </script>
+    `;
+
+    expect(parseBilibiliMobileHtml5Playback({ html })).toEqual({
+      playUrl: "https://example.com/media.mp4",
+      cid: 168325345,
+      title: "demo title",
+      coverUrl: "https://example.com/cover.jpg"
+    });
+  });
+
+  it("writes and reads local audio cache metadata", () => {
+    const root = mkdtempSync(join(tmpdir(), "local-audio-cache-"));
+    const paths = getLocalAudioCachePaths({
+      cacheRoot: root,
+      cacheKey: "BV1B7411m7LV"
+    });
+    mkdirSync(paths.itemDir, { recursive: true });
+
+    writeLocalAudioCacheMetadata({
+      metadataPath: paths.metadataPath,
+      metadata: {
+        cacheKey: "BV1B7411m7LV",
+        sourceUrl: "https://www.bilibili.com/video/BV1B7411m7LV?p=1",
+        normalizedUrl: "https://www.bilibili.com/video/BV1B7411m7LV?p=1",
+        title: "demo title",
+        bvid: "BV1B7411m7LV",
+        coverUrl: "https://example.com/cover.jpg",
+        durationSeconds: 321,
+        createdAt: "2026-04-23T12:00:00.000Z"
+      }
+    });
+
+    expect(readLocalAudioCacheMetadata(paths.metadataPath)).toEqual({
+      cacheKey: "BV1B7411m7LV",
+      sourceUrl: "https://www.bilibili.com/video/BV1B7411m7LV?p=1",
+      normalizedUrl: "https://www.bilibili.com/video/BV1B7411m7LV?p=1",
+      title: "demo title",
+      bvid: "BV1B7411m7LV",
+      coverUrl: "https://example.com/cover.jpg",
+      durationSeconds: 321,
+      createdAt: "2026-04-23T12:00:00.000Z"
+    });
+  });
+
+  it("lists local audio cache keys from cache directories", () => {
+    const root = mkdtempSync(join(tmpdir(), "local-audio-cache-"));
+    mkdirSync(join(root, "BV1B7411m7LV"));
+    mkdirSync(join(root, "BV2demo"));
+
+    expect(listLocalAudioCacheKeys(root)).toEqual(["BV1B7411m7LV", "BV2demo"]);
   });
 
   it("prefers the first available browser cookie source", () => {

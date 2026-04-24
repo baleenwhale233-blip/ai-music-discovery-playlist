@@ -760,3 +760,741 @@ Mobile Web First
 ### 下一个最合理的动作
 
 - 在下一轮业务改动结束后，补一条面向实际功能进度的 `docs/development_log.md` 记录，把当前 worktree 里的进行中状态也完整落盘
+
+---
+
+## 2026-04-23 20:45 CST
+
+### 本轮目标
+
+修复本地音频缓存链路里 B 站 412 问题，让实验页重新能够把 B 站内容落到本地音频缓存。
+
+### 本轮完成
+
+- 定位到失败根因不在链接解析，而在 `yt-dlp` 请求：
+  - `https://api.bilibili.com/x/player/wbi/playurl`
+  - 返回 `HTTP 412 Precondition Failed`
+- 实测确认：
+  - 关代理后仍然 412
+  - 当前环境下浏览器 cookies 无法稳定解密，不适合作为主修复路径
+- 改为绕开 `yt-dlp` 的 B 站取流链路：
+  - 通过 `m.bilibili.com/video/...` 页面里的 `window.__INITIAL_STATE__`
+  - 提取 `video.playUrlInfo[0].url`
+  - 再交给 `ffmpeg` 直接抽取本地 `m4a`
+- 为新的缓存链路补了纯函数测试：
+  - 移动页播放 URL 解析
+  - `ffmpeg` 参数构建
+- 更新了协作文档和 README：
+  - 当前本地音频实验不再把 `yt-dlp` 作为必需依赖
+  - 实验依赖说明收口为 `ffmpeg`
+
+### 影响目录
+
+- `apps/api/src/modules/contents/contents.service.ts`
+- `apps/api/src/modules/contents/local-audio-cache.ts`
+- `apps/api/src/modules/contents/local-audio-cache.test.ts`
+- `README.md`
+- `AGENTS.md`
+- `docs/development_log.md`
+
+### 本轮实际验证结果
+
+以下验证已实际执行并通过：
+
+- `yt-dlp -v ...` 复现 412，确认失败点在 `x/player/wbi/playurl`
+- 从 `m.bilibili.com` 页面提取 `playUrlInfo[0].url`
+- `ffmpeg` 基于该播放 URL 成功抽取 `3s` 本地 `m4a` 样本到 `/tmp/bili-sample.m4a`
+
+### 当前剩余问题
+
+- 当前修复路径依赖移动页 `__INITIAL_STATE__` 结构，后续如果 B 站移动页结构再改，仍需要重新适配
+- 当前没有把封面额外落本地文件，`coverRelativePath` 仍可能为空
+- 如果本地没有 PostgreSQL，实验页现在会回退到纯本地缓存播放单，但收藏夹预览仍然依赖数据库
+
+### 下一个最合理的动作
+
+- 跑一轮 `contents` 相关测试、`typecheck`、`lint`、`build`，确认新缓存链路在仓库内通过，再用实验页做一次人工验证
+
+---
+
+## 2026-04-23 23:20 CST
+
+### 本轮目标
+
+修复“单条缓存和播放都报 Internal server error”的本地实验可用性问题，并把无数据库环境下的体验补到可用。
+
+### 本轮完成
+
+- 定位出当前本地 500 的真实原因不是单一问题，而是两层叠加：
+  - `yt-dlp` 的 B 站 `wbi/playurl` 412
+  - 本地未启动 PostgreSQL，导致 Prisma 首次写播放单就抛错
+- 保留上一轮的移动页取流方案，同时新增无数据库 fallback：
+  - 缓存成功后把最小元数据写入 `.local-audio-cache/<cacheKey>/metadata.json`
+  - `GET /experimental/local-audio/playlist` 在 Prisma 不可用时从本地缓存目录生成播放单
+  - 移除单条和清空播放单在 Prisma 不可用时退回到纯本地缓存删除
+- 修复了 `open-local-audio-experiment.command` 的启动探针文案：
+  - 从旧的 `Experimental Local Audio v1`
+  - 更新为当前页面实际文案 `Experimental Local Playlist v1`
+- 为全局 HTTP 异常过滤器补了 error log，避免后续只返回 `Internal server error` 却没有服务端栈
+
+### 影响目录
+
+- `apps/api/src/config/env.ts`
+- `apps/api/src/app.module.ts`
+- `apps/api/src/modules/contents/local-audio-cache.ts`
+- `apps/api/src/modules/contents/local-audio-cache.test.ts`
+- `apps/api/src/modules/contents/contents.service.ts`
+- `apps/api/src/common/filters/http-exception.filter.ts`
+- `open-local-audio-experiment.command`
+- `docs/development_log.md`
+
+### 本轮实际验证结果
+
+以下验证已实际执行并通过：
+
+- `pnpm --filter @ai-music-playlist/api test src/modules/contents/local-audio-cache.test.ts`
+- `pnpm --filter @ai-music-playlist/api typecheck`
+- `pnpm --filter @ai-music-playlist/api build`
+- 非沙箱进程内调用 `cacheBilibiliAudio(...)` 成功返回本地缓存响应
+- 非沙箱进程内调用 `getExperimentalPlaylist()` 在无 PostgreSQL 环境下成功返回本地缓存播放单
+
+### 当前剩余问题
+
+- 收藏夹预览链路当前仍然依赖 Prisma / PostgreSQL，本轮没有把它改成无数据库 fallback
+- 启动脚本会清理 3000/4000 端口，但如果有异常残留进程，仍可能需要先运行一次停止脚本
+
+### 下一个最合理的动作
+
+- 重启本地实验服务到最新构建后，再从页面验证：
+  - 单条 B 站链接缓存
+  - 播放单初始化读取
+  - audio 播放
+
+---
+
+## 2026-04-23 23:35 CST
+
+### 本轮目标
+
+给本地实验补一个比现有 shell 脚本更稳的启动形式，减少 `EADDRINUSE` 和 `next build/start` 带来的误判。
+
+### 本轮完成
+
+- 新增了 VS Code 本地调试配置：
+  - `.vscode/launch.json`
+  - `.vscode/tasks.json`
+- 提供了一个 compound 启动入口：
+  - `Local Audio Experiment (Dev)`
+- compound 启动会先执行：
+  - `./stop-local-audio-experiment.command`
+- 然后分别启动：
+  - `pnpm --filter @ai-music-playlist/api dev`
+  - `pnpm --filter @ai-music-playlist/admin dev`
+- 更新了 `README.md`，明确推荐：
+  - 本地实验优先使用 `API dev + admin dev`
+  - 尽量绕开当前不稳定的 `admin build + start` 路径
+
+### 影响目录
+
+- `.vscode/launch.json`
+- `.vscode/tasks.json`
+- `README.md`
+- `docs/development_log.md`
+
+### 本轮实际验证结果
+
+以下检查已实际执行并通过：
+
+- `zsh -n open-local-audio-experiment.command`
+- `pnpm --filter @ai-music-playlist/api lint`
+- `pnpm --filter @ai-music-playlist/api build`
+
+### 当前剩余问题
+
+- `apps/admin` 的 `next build` / `next start` 在这台机器上仍有 `.next` 产物相关不稳定问题
+- shell 脚本仍然适合作为“一键启动”入口，但目前不适合作为最稳的日常开发入口
+
+### 下一个最合理的动作
+
+- 以 VS Code compound 或双终端 dev 模式为主继续验证 `/debug/local-audio`
+
+---
+
+## 2026-04-24 11:45 CST
+
+### 本轮目标
+
+停止在现有 `apps/api + apps/admin` 调试链路里继续逐点救火，按产品文档和新技术路线新增一个仓库内隔离的 clean-room 本地音频实验入口，先验证核心产品链路。
+
+### 本轮完成
+
+- 新增 `experiments/local-audio-clean-room`：
+  - 使用一个纯 Node HTTP 进程同时提供页面和 API
+  - 默认端口 `3010`
+  - 不依赖 Nest、Next、Prisma、Redis、tsx watch 或 `.next` 缓存
+- 新增 clean-room API：
+  - `GET /`
+  - `GET /health`
+  - `POST /api/cache`
+  - `POST /api/favorite-preview`
+  - `GET /api/playlist`
+  - `DELETE /api/playlist`
+  - `DELETE /api/playlist/:cacheKey`
+  - `GET /api/audio/:cacheKey`
+- 新增本地文件缓存约定：
+  - `.local-audio-clean-room-cache/<cacheKey>/audio.m4a`
+  - `.local-audio-clean-room-cache/<cacheKey>/metadata.json`
+- 保留已验证的 B 站取流路线：
+  - 视频元信息走 `x/web-interface/view`
+  - 播放直链走移动页 `window.__INITIAL_STATE__`
+  - 音频转换走 `ffmpeg`
+- 新增根目录脚本：
+  - `pnpm dev:local-audio-clean`
+  - `pnpm test:local-audio-clean`
+- 新增 Node 运行时约束：
+  - `.nvmrc`
+  - `.node-version`
+  - 默认锁到 Node 22 LTS
+- 更新 `README.md` 和 `AGENTS.md`：
+  - 明确 clean-room 是当前验证核心链路的更稳入口
+  - 明确不要把 Node 25.3.0 作为日常验证环境
+
+### 影响目录
+
+- `experiments/local-audio-clean-room`
+- `package.json`
+- `.gitignore`
+- `.nvmrc`
+- `.node-version`
+- `README.md`
+- `AGENTS.md`
+- `docs/development_log.md`
+
+### 本轮实际验证结果
+
+以下验证已实际执行：
+
+- `node --test experiments/local-audio-clean-room/core.test.mjs`
+- `pnpm test:local-audio-clean`
+- `pnpm dev:local-audio-clean`
+- `curl -sS http://127.0.0.1:3010/health`
+- `curl -sS http://127.0.0.1:3010/`
+- `curl -sS http://127.0.0.1:3010/api/playlist`
+- `curl -sS -i -H 'Range: bytes=2-5' http://127.0.0.1:3010/api/audio/BVsmoke`
+- `node --check experiments/local-audio-clean-room/core.mjs`
+- `node --check experiments/local-audio-clean-room/server.mjs`
+- `git diff --check`
+
+验证结果：
+
+- 单元测试和 HTTP smoke test 均通过
+- 当前机器仍在 Node 25.3.0 下执行，因此 `pnpm` 会按新增 `engines` 约束提示 Node 版本警告；测试本身通过
+- `GET /health` 返回 200
+- `GET /` 返回 clean-room 页面
+- 空缓存时 `GET /api/playlist` 返回空听单
+- 临时缓存音频的 Range 请求返回 `206 Partial Content` 和正确 `Content-Range`
+
+### 当前剩余问题
+
+- 本轮没有把 clean-room 实现回迁到正式 `apps/api + apps/admin`
+- 本轮没有做真实 B 站单条链接的端到端缓存，因为当前执行环境仍是 Node 25.3.0；日常手工验证建议先切到 Node 22 LTS
+- 收藏夹候选删除只在页面内存中生效，符合 clean-room 实验边界，不是正式导入系统
+
+### 下一个最合理的动作
+
+- 使用 Node 22 LTS 运行 `pnpm dev:local-audio-clean`
+- 打开 `http://127.0.0.1:3010`
+- 用真实 B 站单条链接和收藏夹链接完成一次人工端到端验证
+- 如果 clean-room 链路稳定，再把对应实现回迁到正式 `apps/api + apps/admin`
+
+---
+
+## 2026-04-24 12:10 CST
+
+### 本轮目标
+
+把本地验证路径进一步收口成“一个命令出诊断结果，一个页面做人工验证”，避免继续在多个终端和多个服务之间来回切换。
+
+### 本轮完成
+
+- 安装并切换 Homebrew 全局 Node 到 `node@22`
+  - 当前 `node -v` 为 `v22.22.2`
+  - 当前 `pnpm -v` 为 `9.15.0`
+- 修复了安装 `node@22` 后全局 `node` 仍指向 Node 25 导致的 `libsimdjson.29.dylib` 动态库错误：
+  - `brew unlink node`
+  - `brew link --overwrite --force node@22`
+- 新增 `pnpm verify:local-audio-clean` 作为最快排查命令：
+  - 打印 Node 版本和二进制路径
+  - 跑 clean-room 单元测试
+  - 临时启动 `127.0.0.1:3010`
+  - 验证 `/health`
+  - 验证页面内容
+  - 验证空听单
+  - 验证音频 Range `206 Partial Content`
+  - 自动关闭 smoke 服务
+- 保留 `pnpm dev:local-audio-clean` 作为人工验证入口。
+
+### 影响目录
+
+- `experiments/local-audio-clean-room/verify.mjs`
+- `package.json`
+- `README.md`
+- `docs/development_log.md`
+
+### 本轮实际验证结果
+
+以下命令已实际执行并通过：
+
+- `node -v`
+- `which node`
+- `pnpm -v`
+- `pnpm verify:local-audio-clean`
+
+验证结果：
+
+- `node -v` 返回 `v22.22.2`
+- `which node` 返回 `/opt/homebrew/bin/node`
+- `pnpm verify:local-audio-clean` 通过全部 7 个测试，并完成 `health/page/empty playlist/audio range 206` smoke 验证
+
+### 当前剩余问题
+
+- 真实 B 站单条缓存和收藏夹候选仍需要用户在页面里做一次人工端到端验证
+- `apps/api + apps/admin` 的旧实验链路仍保留为 WIP，本轮只收口 clean-room 验证路径
+
+### 下一个最合理的动作
+
+- 日常排查先跑 `pnpm verify:local-audio-clean`
+- 人工验证再跑 `pnpm dev:local-audio-clean`
+- 打开 `http://127.0.0.1:3010`
+- 只在 clean-room 稳定后，再考虑把实现回迁到正式 Next/Nest 工作区
+
+---
+
+## 2026-04-24 12:35 CST
+
+### 本轮目标
+
+修复 clean-room 实验中两个真实验收问题：缓存后的 B 站封面不显示，以及视频页内 `custom_collection` / 合集链接不能解析候选。
+
+### 本轮完成
+
+- 为 clean-room 增加同源封面代理：
+  - 听单里的封面 URL 现在返回 `/api/cover/:cacheKey`
+  - `metadata.json` 仍保留原始 B 站封面地址
+  - `/api/cover/:cacheKey` 用 B 站 referer 和桌面 UA 拉取图片，避免浏览器直接加载外链封面失败
+- 扩展候选预览能力：
+  - 原 `POST /api/favorite-preview` 继续兼容收藏夹 / 播放列表链接
+  - 新增支持视频页内 `window.__INITIAL_STATE__.videoData.ugc_season`
+  - 支持 `space.bilibili.com/.../channel/collectiondetail?sid=...` 形式的合集链接
+  - 如果视频页内嵌合集数据不完整，会回退到 B 站合集分页 API 拉取候选
+- 调整 clean-room 页面文案：
+  - 从“收藏夹候选”改为“合集 / 收藏夹候选”
+  - 解析候选时不再从前端固定限制 30 条，由后端默认最多取 500 条
+  - 状态栏显示已取候选数和总数
+- 修复 `pnpm verify:local-audio-clean`：
+  - smoke server 改为随机临时端口
+  - 避免和人工验证用的固定 `3010` 端口冲突
+
+### 影响目录
+
+- `experiments/local-audio-clean-room/core.mjs`
+- `experiments/local-audio-clean-room/server.mjs`
+- `experiments/local-audio-clean-room/core.test.mjs`
+- `experiments/local-audio-clean-room/server.test.mjs`
+- `experiments/local-audio-clean-room/verify.mjs`
+- `docs/development_log.md`
+
+### 本轮实际验证结果
+
+以下命令已实际执行并通过：
+
+- `pnpm test:local-audio-clean`
+- `pnpm verify:local-audio-clean`
+- `git diff --check`
+
+另外使用用户给出的真实 B 站链接做了只读解析验证：
+
+- 链接：`https://www.bilibili.com/video/BV1NFq2B8EVS/`（已脱敏分享查询参数）
+- 解析结果：合集标题 `不存在的电台`
+- `mediaId`: `6609608`
+- `mid`: `1091`
+- `totalCount`: `123`
+- `itemCount`: `123`
+- 当前视频 `BV1NFq2B8EVS` 出现在候选第 62 条
+
+### 当前剩余问题
+
+- 候选列表里的封面目前仍使用 B 站图片外链，缓存进入听单后的封面已走同源代理；如果候选封面也被浏览器拦截，下一步可增加受限域名的候选封面代理。
+- clean-room 仍是隔离实验，不是正式 `apps/api + apps/admin` 回迁实现。
+- 大合集批量缓存仍是串行执行，适合验证，不适合长期生产体验；正式化时需要任务队列、并发限制和失败重试。
+
+### 下一个最合理的动作
+
+- 运行 `pnpm dev:local-audio-clean`
+- 打开 `http://127.0.0.1:3010`
+- 用上述视频页合集链接验证候选解析
+- 先删除不想缓存的候选，再少量缓存几首验证封面、音频 Range 和连续播放
+
+---
+
+## 2026-04-24 12:55 CST
+
+### 本轮目标
+
+修复 clean-room 页面中“合集候选能解析但封面仍不显示”的问题。
+
+### 根因
+
+- 上一轮只给“已缓存进入听单的封面”增加了 `/api/cover/:cacheKey` 同源代理。
+- 合集 / 收藏夹候选列表仍然返回 B 站图片外链，浏览器侧可能继续被防盗链、跨域策略或图片域名策略影响。
+- 本地验证确认已缓存听单封面代理可用；问题主要落在候选列表封面链路。
+
+### 本轮完成
+
+- 新增候选封面同源代理：
+  - `GET /api/cover-proxy?url=...`
+  - 仅允许代理 `hdslb.com` / `biliimg.com` 域名，避免变成任意 URL 转发器
+  - 拉取图片时携带 B 站 referer 和桌面 UA
+- 所有候选 preview 的 `coverUrl` 改为 `/api/cover-proxy?url=...`：
+  - 收藏夹候选
+  - 视频页 `ugc_season` 合集候选
+  - `collectiondetail?sid=...` 分页合集候选
+- 保留已缓存听单封面代理 `/api/cover/:cacheKey` 不变。
+
+### 影响目录
+
+- `experiments/local-audio-clean-room/core.mjs`
+- `experiments/local-audio-clean-room/server.mjs`
+- `experiments/local-audio-clean-room/core.test.mjs`
+- `experiments/local-audio-clean-room/server.test.mjs`
+- `docs/development_log.md`
+
+### 本轮实际验证结果
+
+以下命令已实际执行并通过：
+
+- `pnpm test:local-audio-clean`
+- `pnpm verify:local-audio-clean`
+
+另外做了真实 B 站链接和真实图片代理验证：
+
+- 用户给出的合集链接仍可解析为 `不存在的电台`，`totalCount=123`，`itemCount=123`
+- 候选封面现在返回 `/api/cover-proxy?url=...`
+- 临时本地服务请求真实 B 站封面代理返回 `200 image/jpeg`
+
+### 当前剩余问题
+
+- 如果浏览器里仍看不到封面，优先确认是否已经重启 `pnpm dev:local-audio-clean`，因为运行中的 Node 服务不会自动热更新。
+- 大合集批量缓存仍然是验证用串行缓存，后续正式化需要队列、失败重试和并发限制。
+
+### 下一个最合理的动作
+
+- 停掉当前 `pnpm dev:local-audio-clean`
+- 重新运行 `pnpm dev:local-audio-clean`
+- 刷新 `http://127.0.0.1:3010`
+- 重新解析合集，确认候选列表和听单封面都能显示
+
+---
+
+## 2026-04-24 13:20 CST
+
+### 本轮目标
+
+为 clean-room 合集候选区增加批量筛选操作，让大合集先解析候选，再由用户决定缓存哪些条目。
+
+### 本轮完成
+
+- 合集 / 收藏夹候选区新增批量操作：
+  - 全选
+  - 反选
+  - 清空选择
+  - 删除已选
+  - 缓存已选
+- 每条候选新增 checkbox。
+- 解析合集后默认不选中任何候选，避免几百首合集被误点全量缓存。
+- 候选区新增选择计数：
+  - `已选 X / 候选 Y`
+- `删除已选` 只影响当前候选列表，不删除本地音频缓存。
+- `缓存已选` 只串行缓存已选条目；缓存成功后从候选列表移除，并刷新听单。
+
+### 影响目录
+
+- `experiments/local-audio-clean-room/server.mjs`
+- `experiments/local-audio-clean-room/server.test.mjs`
+- `docs/development_log.md`
+
+### 本轮实际验证结果
+
+以下命令已实际执行并通过：
+
+- `pnpm test:local-audio-clean`
+- `pnpm verify:local-audio-clean`
+
+验证结果：
+
+- clean-room 单元测试从 10 个增加到 11 个，全部通过。
+- 新增页面契约测试覆盖批量候选操作按钮和候选 checkbox 渲染。
+- smoke test 继续通过 `/health`、页面、空听单和音频 Range `206`。
+
+### 当前部署判断
+
+- 闲置电脑可以作为第一版转换节点，但不建议直接暴露公网端口。
+- 更稳的第一版是“云服务器做公网入口 / HTTPS / 反代或任务入口，闲置电脑只主动连出去拿任务并上传结果”。
+- 如果直接用海外服务器承载服务，只要访问没有被明显阻断，也可以跑 50 人左右测试；但要接受大陆用户延迟、B 站链路稳定性和音频流量成本的不确定性。
+
+### 下一个最合理的动作
+
+- 重启 `pnpm dev:local-audio-clean`
+- 用 123 首左右的真实合集验证多选、删除已选、缓存已选
+- 下一轮如果要准备 50 人测试，优先设计“入口服务 + 转换 worker + 任务队列 + 存储上限”的最小部署形态
+
+---
+
+## 2026-04-24 14:25 CST
+
+### 本轮目标
+
+排查 B 站新分享链接 `https://www.bilibili.com/list/ml3960775205?...&bvid=...` 在 clean-room 中返回“请求错误”的问题，并明确当前应支持的链接形态。
+
+### 根因
+
+- `list/ml3960775205` 本身可以被现有正则解析成 `mediaId=3960775205`。
+- B 站旧收藏夹 API `x/v3/fav/resource/list` 对这个 ID 可用。
+- 但 clean-room 之前默认用 `ps=50` 拉列表；该 list 形态在 `ps=50` 时返回 `code=-400, message=请求错误`。
+- 使用较小 page size，例如 `ps=20`，可以正常返回候选。
+
+### 本轮完成
+
+- 收藏夹 / 歌单预览改为保守分页拉取：
+  - 每页 `ps=20`
+  - 根据 `has_more` 继续翻页
+  - 默认上限仍由 clean-room preview limit 控制
+- 新增回归测试：
+  - 覆盖 `https://www.bilibili.com/list/ml...?...&bvid=...`
+  - 确认不会再使用 `ps=50`
+  - 确认候选封面仍走 `/api/cover-proxy`
+
+### 当前确认支持的 B 站输入形态
+
+- 单条视频：
+  - `https://www.bilibili.com/video/BV...`
+  - `https://m.bilibili.com/video/BV...`
+  - 复制文本中只要包含 `BV...` 也可解析为单条
+- 视频页内合集：
+  - `https://www.bilibili.com/video/BV...?spm_id_from=...custom_collection...`
+  - 通过桌面页 `window.__INITIAL_STATE__.videoData.ugc_season` 解析
+- UP 主合集页：
+  - `https://space.bilibili.com/<mid>/channel/collectiondetail?sid=<seasonId>`
+  - 通过 `x/polymer/web-space/seasons_archives_list` 分页解析
+- 收藏夹 / 歌单：
+  - `https://www.bilibili.com/list/ml<mediaId>`
+  - `https://www.bilibili.com/medialist/detail/ml<mediaId>`
+  - `https://www.bilibili.com/list/ml<mediaId>?oid=...&bvid=...`
+  - `media_id=<id>`
+  - `mlid=<id>`
+  - `favlist?fid=<id>` 仍兼容，但实际能否拿到内容取决于 B 站返回的 media/fid 权限和列表状态
+
+### 本轮实际验证结果
+
+以下命令已实际执行并通过：
+
+- `pnpm test:local-audio-clean`
+- `pnpm verify:local-audio-clean`
+
+真实链接验证：
+
+- `https://www.bilibili.com/list/ml3960775205?spm_id_from=333.1387.0.0&oid=115755324543781&bvid=BV1NFq2B8EVS`
+- API 返回 `200`
+- 标题：`歌单？`
+- `totalCount=16`
+- 页面显示：`已选 0 / 候选 16`
+- 状态栏显示：`已解析候选：歌单？ / 16 条`
+
+### 当前剩余问题
+
+- B 站分享入口会变化，后续应持续把失败链接沉淀成测试用例。
+- `favlist?fid=...` 可能是账号空间里的收藏夹 ID，不一定总能对应可公开读取的 media 内容；失败时需要在 UI 上给更明确提示。
+
+### 下一个最合理的动作
+
+- 用户继续丢真实失败链接，优先补解析格式和回归测试。
+- 若准备多人测试，下一步应设计并实现转换任务状态、失败提示和并发限制。
+
+---
+
+## 2026-04-24 19:15 CST
+
+### 本轮目标
+
+把 clean-room 已验证的本地音频链路正式化为 Web First 产品工程骨架，并为后续 React Native 复用稳定 `/api/v1` 契约做准备。
+
+### 本轮完成
+
+- 新增正式用户端 `apps/web`：
+  - `/login`：alpha 邀请码 + 占位验证码登录
+  - `/`：导入 B 站单条、合集、收藏夹或 `/list/ml...` 链接，筛选候选并批量缓存
+  - `/playlist`：本地听单与真实 `<audio>` 播放器
+- 保留 `apps/admin` 为后台/debug/实验入口，不再作为正式用户端主线。
+- 保留 `experiments/local-audio-clean-room` 为参考实现和回归样本，不让它继续长成正式产品。
+- 在 `packages/api-contract` 新增正式导入、缓存、本地听单契约：
+  - `importPreview*`
+  - `importCache*`
+  - `localAudioPlaylist*`
+  - `sourceContentCache*`
+- 在 `apps/api` 新增 alpha 登录和正式端点：
+  - `POST /api/v1/auth/verify-code`
+  - `POST /api/v1/imports/preview`
+  - `PATCH /api/v1/imports/:collectionId/items`
+  - `POST /api/v1/imports/:collectionId/cache`
+  - `POST /api/v1/contents/:sourceContentId/cache`
+  - `GET /api/v1/playlists/local-audio`
+  - `DELETE /api/v1/playlists/local-audio/items/:playlistItemId`
+  - `DELETE /api/v1/playlists/local-audio`
+  - `GET /api/v1/local-audio/:cacheKey/audio`
+  - `GET /api/v1/local-audio/:cacheKey/cover`
+- 正式 API 默认按 alpha 用户隔离：
+  - 登录后签发 HMAC bearer token
+  - 导入、缓存、听单、删除均使用 token 中的 `userId`
+  - 音频与封面 media URL 支持 `access_token` query，方便原生 `<audio>` / `<img>` 请求鉴权
+- B 站正式导入预览复用 clean-room 已验证策略：
+  - 单条视频走 `x/web-interface/view`
+  - 收藏夹 / `/list/ml...` 走 `x/v3/fav/resource/list`
+  - 收藏夹分页固定 `ps=20`
+  - `collectiondetail?sid=...` 走 season archives
+  - 自定义合集视频页优先解析 `window.__INITIAL_STATE__`
+
+### 影响目录
+
+- `apps/web`
+- `apps/api/src/modules/auth`
+- `apps/api/src/modules/contents`
+- `apps/api/src/modules/imports`
+- `apps/api/src/modules/playlists`
+- `packages/api-contract`
+- `README.md`
+- `AGENTS.md`
+- `docs/2026-04-22-mainland-mvp-technical-route.md`
+- `docs/2026-04-22-mvp-engineering-breakdown.md`
+
+### 本轮已执行验证
+
+- `pnpm install`
+- `pnpm --filter @ai-music-playlist/api-contract test`
+- `pnpm --filter @ai-music-playlist/api-contract typecheck`
+- `pnpm --filter @ai-music-playlist/api test -- src/modules/auth/alpha-auth.test.ts src/modules/contents/bilibili-import-preview.test.ts src/modules/contents/local-audio-playlist.test.ts src/modules/contents/bilibili-link.parser.test.ts`
+- `pnpm --filter @ai-music-playlist/api typecheck`
+- `pnpm --filter @ai-music-playlist/web typecheck`
+- `pnpm --filter @ai-music-playlist/web test`
+- `pnpm test`
+- `pnpm typecheck`
+- `pnpm lint`
+- `pnpm --filter @ai-music-playlist/api-contract build`
+- `pnpm --filter @ai-music-playlist/types build`
+- `pnpm --filter @ai-music-playlist/config build`
+- `pnpm --filter @ai-music-playlist/api build`
+- `pnpm --filter @ai-music-playlist/web build`
+- `pnpm --filter @ai-music-playlist/admin build`
+- `pnpm test:local-audio-clean`
+- `pnpm verify:local-audio-clean`
+
+补充说明：
+
+- 全量 `pnpm build` 中 API / Web / Admin / packages 已完成构建，mobile 的 Expo export 阶段长时间无输出；手动终止卡住的父进程后该全量命令最终以失败状态结束。
+- 因为 `apps/mobile` 当前是后置 React Native 壳，本轮以 Web First 相关包的独立 build 结果作为正式化验收依据。
+- `pnpm test` 通过，但 BullMQ 队列测试在无 Redis 沙箱环境下仍会打印 `EPERM 127.0.0.1:6379` stderr；测试本身通过。
+
+### 当前剩余问题
+
+- 正式链路还没有跑真实浏览器端到端 smoke；下一步应启动 `pnpm dev:api` + `pnpm dev:web`，用真实 B 站链接走登录、预览、少量缓存、播放。
+- 批量缓存当前仍是同步串行执行，适合 alpha 排查，不适合长期生产；50 用户测试前应加队列、并发限制和失败重试。
+- Alpha 登录仍是占位验证码和邀请码，不接真实短信服务。
+- 当前音频文件仍落本机文件系统；如果部署到云端或 Mac mini worker，需要继续明确存储路径、备份和容量限制。
+- 后置 `apps/mobile` 的 Expo export 需要单独排查为什么全量 `pnpm build` 结束慢/父进程不退出。
+
+### 下一个最合理的动作
+
+- 启动 API 和 Web：
+  - `pnpm dev:api`
+  - `pnpm dev:web`
+- 打开 `http://127.0.0.1:3020`
+- 使用 `alpha-50 / 246810` 登录
+- 用真实单条和 `/list/ml...` 链接各缓存 1-2 首，验证播放器、封面和 Range 播放
+
+---
+
+## 2026-04-24 20:35 CST
+
+### 本轮目标
+
+排查正式 Web 端 `http://127.0.0.1:3020/` 访问被拒绝，以及 API 健康检查继续返回 500 的问题。
+
+### 本轮完成
+
+- 通过提权启动本地开发服务，确认 sandbox 内直接启动会被本机 socket / pipe 权限限制拦截：
+  - `pnpm dev:api`
+  - `pnpm dev:web`
+- 确认 Web 端 `3020` 已可返回正式登录落地页。
+- 修复 Nest controller/service 构造函数依赖在 dev runtime 下变成 `undefined` 的问题：
+  - 给 `HealthController`、`ContentsController`、`ImportsController`、`PlaylistsController`、`LocalAudioController`、`AuthController` 显式增加 `@Inject(...)`
+  - 给 `AuthService`、`ContentsService` 注入 `PrismaService` 时显式增加 `@Inject(PrismaService)`
+- 重新请求 `GET /api/v1/health`，确认不再返回 500。
+- 通过 in-app browser 重新加载 `http://127.0.0.1:3020/`，确认页面显示 `先登录，再整理你的本地听单。`
+
+### 影响目录
+
+- `apps/api/src/modules/health`
+- `apps/api/src/modules/auth`
+- `apps/api/src/modules/contents`
+- `apps/api/src/modules/imports`
+- `apps/api/src/modules/playlists`
+- `docs/development_log.md`
+
+### 本轮已执行验证
+
+- `curl -sS http://127.0.0.1:4000/api/v1/health`
+- `curl -sS http://127.0.0.1:3020/`
+- `pnpm --filter @ai-music-playlist/api typecheck`
+- in-app browser reload `http://127.0.0.1:3020/`
+
+### 当前剩余问题
+
+- 还没有继续走 Alpha 登录后的真实端到端导入、缓存、播放验收。
+- 如果后续登录或导入失败，优先检查本地 PostgreSQL / Prisma 连接状态，而不是再回到端口或 Next 缓存方向。
+
+### 下一个最合理的动作
+
+- 在浏览器中进入 `/login`，用 `alpha-50 / 246810` 登录。
+- 登录后用真实单条和 `/list/ml...` 链接各跑一轮预览、缓存、播放。
+
+---
+
+## 2026-04-25 00:20 CST
+
+### 本轮目标
+
+整理当前 Web First 正式化与 clean-room 实验改动，提交并推送到 GitHub。
+
+### 本轮完成
+
+- 提交前检查当前分支 `codex/web-first-formalization` 的完整变更范围。
+- 确认仓库 git 提交邮箱为 `baleen.whale233@gmail.com`。
+- 脱敏开发日志中带 `vd_source` 的 B 站分享查询参数，避免把个人分享参数推送到 GitHub。
+- 确认工作区没有明显误带密钥、GitHub token、OpenAI key 或本地缓存音频文件。
+
+### 本轮已执行验证
+
+- `git diff --check`
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm test:local-audio-clean`
+- `pnpm verify:local-audio-clean`
+
+### 当前剩余问题
+
+- `gh auth status` 显示 GitHub CLI token 失效；本轮先尝试使用 git remote 的 HTTPS 凭据推送。
+- `pnpm test` 仍会在无 Redis 权限的 sandbox 中打印 `EPERM 127.0.0.1:6379` stderr，但测试任务本身通过。
+
+### 下一个最合理的动作
+
+- 推送当前分支到 GitHub。
+- 推送后继续规划 Alpha 账号体系：邮箱密码 + 邀请码优先，不急于接邮件验证码服务。

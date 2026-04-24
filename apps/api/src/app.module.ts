@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { join } from "node:path";
 
 import { AppConfigModule } from "./config/app-config.module";
 import { AdminModule } from "./modules/admin/admin.module";
@@ -21,7 +22,8 @@ import { RedisModule } from "./platform/redis/redis.module";
 @Module({
   imports: [
     ConfigModule.forRoot({
-      isGlobal: true
+      isGlobal: true,
+      envFilePath: [join(process.cwd(), "apps/api/.env"), join(process.cwd(), ".env")]
     }),
     AppConfigModule,
     PrismaModule,

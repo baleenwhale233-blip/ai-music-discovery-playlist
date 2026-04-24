@@ -68,3 +68,34 @@ export function parseBilibiliFavoriteLink(rawInput: string) {
     mediaId: idMatch[1]
   };
 }
+
+export function parseBilibiliCollectionLink(rawInput: string) {
+  const input = rawInput.trim();
+
+  try {
+    const url = new URL(input);
+    const seasonId = url.searchParams.get("sid") ?? url.searchParams.get("season_id");
+    const mid = url.pathname.match(/\/(\d+)\/channel\/collectiondetail/i)?.[1];
+
+    if (seasonId && /^\d+$/.test(seasonId)) {
+      return {
+        seasonId,
+        mid: mid && /^\d+$/.test(mid) ? mid : null
+      };
+    }
+  } catch {
+    // Copied snippets are handled by the regex fallback below.
+  }
+
+  const seasonMatch = input.match(/(?:sid|season_id)=(\d+)/i);
+  const midMatch = input.match(/space\.bilibili\.com\/(\d+)\/channel\/collectiondetail/i);
+
+  if (!seasonMatch?.[1]) {
+    throw new Error("Unsupported bilibili collection link");
+  }
+
+  return {
+    seasonId: seasonMatch[1],
+    mid: midMatch?.[1] ?? null
+  };
+}

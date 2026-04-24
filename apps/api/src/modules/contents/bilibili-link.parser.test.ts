@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { parseBilibiliFavoriteLink, parseBilibiliLink } from "./bilibili-link.parser";
+import {
+  parseBilibiliCollectionLink,
+  parseBilibiliFavoriteLink,
+  parseBilibiliLink
+} from "./bilibili-link.parser";
 
 describe("parseBilibiliLink", () => {
   it("extracts bvid and page from a standard bilibili video url", () => {
@@ -71,5 +75,23 @@ describe("parseBilibiliFavoriteLink", () => {
     expect(() => parseBilibiliFavoriteLink("https://example.com/foo")).toThrow(
       "Unsupported bilibili favorite link",
     );
+  });
+});
+
+describe("parseBilibiliCollectionLink", () => {
+  it("extracts season and mid from collection detail urls", () => {
+    expect(
+      parseBilibiliCollectionLink("https://space.bilibili.com/1091/channel/collectiondetail?sid=6609608"),
+    ).toEqual({
+      seasonId: "6609608",
+      mid: "1091"
+    });
+  });
+
+  it("extracts season without mid from copied snippets", () => {
+    expect(parseBilibiliCollectionLink("合集 season_id=6609608")).toEqual({
+      seasonId: "6609608",
+      mid: null
+    });
   });
 });
