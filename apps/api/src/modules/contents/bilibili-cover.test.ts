@@ -19,6 +19,12 @@ describe("normalizeBilibiliCoverUrl", () => {
     ).toBe("https://i0.hdslb.com/bfs/archive/abc.jpg");
   });
 
+  it("upgrades protocol-relative bilibili covers to https", () => {
+    expect(normalizeBilibiliCoverUrl("//i0.hdslb.com/bfs/archive/abc.jpg")).toBe(
+      "https://i0.hdslb.com/bfs/archive/abc.jpg",
+    );
+  });
+
   it("returns null when there is no source cover", () => {
     expect(normalizeBilibiliCoverUrl(undefined)).toBeNull();
   });

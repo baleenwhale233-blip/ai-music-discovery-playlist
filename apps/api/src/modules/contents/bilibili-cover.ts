@@ -3,5 +3,5 @@ export function normalizeBilibiliCoverUrl(input?: string | null) {
     return null;
   }
 
-  return input.replace(/^http:\/\//i, "https://");
+  return input.replace(/^\/\//, "https://").replace(/^http:\/\//i, "https://");
 }

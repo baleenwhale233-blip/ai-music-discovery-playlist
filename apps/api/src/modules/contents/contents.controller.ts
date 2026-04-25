@@ -5,6 +5,7 @@ import {
   Get,
   Headers,
   Inject,
+  NotFoundException,
   Param,
   Post,
   Query,
@@ -23,6 +24,7 @@ import type {
   SourceContentCacheResponse
 } from "@ai-music-playlist/api-contract";
 
+import { appEnv } from "../../config/env";
 import type { AlphaAccessTokenPayload } from "../auth/alpha-auth";
 import { AlphaAuthGuard } from "../auth/alpha-auth.guard";
 import { CurrentAlphaUser } from "../auth/current-alpha-user.decorator";
@@ -48,6 +50,8 @@ export class ContentsController {
 
   @Post("debug/parse-bilibili")
   parseBilibili(@Body() body: BilibiliParseRequest): Promise<BilibiliParseResponse> {
+    this.assertDebugRoutesEnabled();
+
     return this.contentsService.parseBilibiliLink(body);
   }
 
@@ -55,11 +59,15 @@ export class ContentsController {
   previewBilibiliFavorite(
     @Body() body: BilibiliFavoritePreviewRequest,
   ): Promise<BilibiliFavoritePreviewResponse> {
+    this.assertExperimentalRoutesEnabled();
+
     return this.contentsService.previewBilibiliFavorite(body);
   }
 
   @Delete("experimental/source-collections/items/:collectionItemId")
   excludeSourceCollectionItem(@Param("collectionItemId") collectionItemId: string) {
+    this.assertExperimentalRoutesEnabled();
+
     return this.contentsService.excludeSourceCollectionItem(collectionItemId);
   }
 
@@ -68,6 +76,8 @@ export class ContentsController {
     @Query("url") url: string,
     @Res({ passthrough: true }) response: { setHeader: (name: string, value: string) => void },
   ) {
+    this.assertDebugRoutesEnabled();
+
     const cover = await this.contentsService.fetchCoverImage(url);
 
     response.setHeader("content-type", cover.contentType);
@@ -78,6 +88,8 @@ export class ContentsController {
 
   @Post("experimental/local-audio")
   cacheLocalAudio(@Body() body: LocalAudioCacheRequest): Promise<LocalAudioCacheResponse> {
+    this.assertExperimentalRoutesEnabled();
+
     return this.contentsService.cacheBilibiliAudio(body);
   }
 
@@ -92,6 +104,8 @@ export class ContentsController {
 
   @Get("experimental/local-audio/playlist")
   getExperimentalPlaylist(): Promise<ExperimentalPlaylistResponse> {
+    this.assertExperimentalRoutesEnabled();
+
     return this.contentsService.getExperimentalPlaylist();
   }
 
@@ -105,6 +119,8 @@ export class ContentsController {
       status: (code: number) => unknown;
     },
   ) {
+    this.assertExperimentalRoutesEnabled();
+
     const audio = this.contentsService.getCachedLocalAudio(cacheKey);
     const parsedRange = parseHttpRange(rangeHeader, audio.totalSize);
 
@@ -112,7 +128,15 @@ export class ContentsController {
     response.setHeader("cache-control", "private, max-age=3600");
     response.setHeader("accept-ranges", "bytes");
 
-    if (parsedRange) {
+    if (parsedRange?.kind === "invalid") {
+      response.status(416);
+      response.setHeader("content-range", parsedRange.contentRange);
+      response.setHeader("content-length", 0);
+
+      return undefined;
+    }
+
+    if (parsedRange?.kind === "range") {
       const rangedAudio = this.contentsService.getCachedLocalAudioRange(cacheKey, {
         start: parsedRange.start,
         end: parsedRange.end
@@ -135,6 +159,8 @@ export class ContentsController {
     @Param("cacheKey") cacheKey: string,
     @Res({ passthrough: true }) response: { setHeader: (name: string, value: string) => void },
   ) {
+    this.assertExperimentalRoutesEnabled();
+
     const cover = this.contentsService.getCachedLocalCover(cacheKey);
 
     response.setHeader("content-type", cover.contentType);
@@ -145,16 +171,34 @@ export class ContentsController {
 
   @Delete("experimental/local-audio/:cacheKey")
   deleteLocalAudio(@Param("cacheKey") cacheKey: string) {
+    this.assertExperimentalRoutesEnabled();
+
     return this.contentsService.deleteCachedLocalAudio(cacheKey);
   }
 
   @Delete("experimental/local-audio/playlist")
   clearExperimentalPlaylist() {
+    this.assertExperimentalRoutesEnabled();
+
     return this.contentsService.clearExperimentalPlaylist();
   }
 
   @Delete("experimental/local-audio/playlist/items/:playlistItemId")
   removeExperimentalPlaylistItem(@Param("playlistItemId") playlistItemId: string) {
+    this.assertExperimentalRoutesEnabled();
+
     return this.contentsService.removeExperimentalPlaylistItem(playlistItemId);
+  }
+
+  private assertDebugRoutesEnabled() {
+    if (!appEnv.ENABLE_DEBUG_ROUTES) {
+      throw new NotFoundException("Debug routes are disabled");
+    }
+  }
+
+  private assertExperimentalRoutesEnabled() {
+    if (!appEnv.ENABLE_EXPERIMENTAL_ROUTES) {
+      throw new NotFoundException("Experimental routes are disabled");
+    }
   }
 }

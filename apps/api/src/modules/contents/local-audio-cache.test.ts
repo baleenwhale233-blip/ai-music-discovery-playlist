@@ -6,6 +6,7 @@ import {
   BILIBILI_DESKTOP_USER_AGENT,
   BILIBILI_MOBILE_USER_AGENT,
   getLocalAudioCachePaths,
+  isPathInsideRoot,
   listLocalAudioCacheKeys,
   parseBilibiliMobileHtml5Playback,
   parseHttpRange,
@@ -33,6 +34,20 @@ describe("local audio cache helpers", () => {
     expect(paths.itemDir).toBe("/tmp/audio-cache/BV1B7411m7LV");
     expect(paths.outputTemplate).toBe("/tmp/audio-cache/BV1B7411m7LV/audio.%(ext)s");
     expect(paths.outputAudioPath).toBe("/tmp/audio-cache/BV1B7411m7LV/audio.m4a");
+  });
+
+  it("rejects path traversal input when building cache paths", () => {
+    expect(() =>
+      getLocalAudioCachePaths({
+        cacheRoot: "/tmp/audio-cache",
+        cacheKey: "../../etc/passwd"
+      }),
+    ).toThrow("Invalid cache key");
+  });
+
+  it("detects whether a resolved path is inside the cache root", () => {
+    expect(isPathInsideRoot("/tmp/audio-cache", "/tmp/audio-cache/BV1/audio.m4a")).toBe(true);
+    expect(isPathInsideRoot("/tmp/audio-cache", "/tmp/audio-cache-evil/BV1/audio.m4a")).toBe(false);
   });
 
   it("builds yt-dlp args for audio extraction without playlists", () => {
@@ -152,29 +167,61 @@ describe("local audio cache helpers", () => {
     ).toEqual(["--cookies-from-browser", "safari"]);
   });
 
-  it("parses a bounded byte range", () => {
-    expect(parseHttpRange("bytes=10-19", 100)).toEqual({
-      start: 10,
-      end: 19,
-      chunkSize: 10,
-      totalSize: 100,
-      contentRange: "bytes 10-19/100"
-    });
-  });
-
-  it("parses an open-ended byte range", () => {
-    expect(parseHttpRange("bytes=90-", 100)).toEqual({
-      start: 90,
+  it("parses bytes=0-99", () => {
+    expect(parseHttpRange("bytes=0-99", 1000)).toEqual({
+      kind: "range",
+      start: 0,
       end: 99,
-      chunkSize: 10,
-      totalSize: 100,
-      contentRange: "bytes 90-99/100"
+      chunkSize: 100,
+      totalSize: 1000,
+      contentRange: "bytes 0-99/1000"
     });
   });
 
-  it("returns null for unsupported ranges", () => {
+  it("parses bytes=100-", () => {
+    expect(parseHttpRange("bytes=100-", 1000)).toEqual({
+      kind: "range",
+      start: 100,
+      end: 999,
+      chunkSize: 900,
+      totalSize: 1000,
+      contentRange: "bytes 100-999/1000"
+    });
+  });
+
+  it("parses bytes=-500", () => {
+    expect(parseHttpRange("bytes=-500", 1000)).toEqual({
+      kind: "range",
+      start: 500,
+      end: 999,
+      chunkSize: 500,
+      totalSize: 1000,
+      contentRange: "bytes 500-999/1000"
+    });
+  });
+
+  it("clamps bytes=0-999999 when the file is smaller", () => {
+    expect(parseHttpRange("bytes=0-999999", 1000)).toEqual({
+      kind: "range",
+      start: 0,
+      end: 999,
+      chunkSize: 1000,
+      totalSize: 1000,
+      contentRange: "bytes 0-999/1000"
+    });
+  });
+
+  it("separates missing range from invalid range", () => {
     expect(parseHttpRange(undefined, 100)).toBeNull();
-    expect(parseHttpRange("items=1-2", 100)).toBeNull();
-    expect(parseHttpRange("bytes=200-300", 100)).toBeNull();
+    expect(parseHttpRange("items=1-2", 100)).toEqual({
+      kind: "invalid",
+      totalSize: 100,
+      contentRange: "bytes */100"
+    });
+    expect(parseHttpRange("bytes=200-300", 100)).toEqual({
+      kind: "invalid",
+      totalSize: 100,
+      contentRange: "bytes */100"
+    });
   });
 });

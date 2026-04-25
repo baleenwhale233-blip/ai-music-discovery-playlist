@@ -32,7 +32,15 @@ export class LocalAudioController {
     response.setHeader("cache-control", "private, max-age=3600");
     response.setHeader("accept-ranges", "bytes");
 
-    if (parsedRange) {
+    if (parsedRange?.kind === "invalid") {
+      response.status(416);
+      response.setHeader("content-range", parsedRange.contentRange);
+      response.setHeader("content-length", 0);
+
+      return undefined;
+    }
+
+    if (parsedRange?.kind === "range") {
       const rangedAudio = await this.contentsService.getCachedLocalAudioRangeForUser(user.userId, cacheKey, {
         start: parsedRange.start,
         end: parsedRange.end

@@ -1549,3 +1549,153 @@ Mobile Web First
 
 - 把本轮修复提交并推送到 `codex/web-first-formalization`。
 - 再次判断该分支是否可以合入 `main`。
+
+---
+
+## 2026-04-25 13:25 CST
+
+### 本轮目标
+
+做一轮代码层面收口，保持正式 Mobile Web Alpha 主链路不重写、不改产品行为，同时补齐 Range/path 安全、生产配置、debug/experimental 隔离和 SourceCollection 用户作用域。
+
+### 本轮完成
+
+- 建立基线：
+  - `node -v` 为 `v22.22.2`
+  - `node_modules` 已存在，因此跳过 `pnpm install`
+  - 初始 `pnpm lint`、`pnpm typecheck`、`pnpm test` 均通过
+  - `pnpm test` 仍打印既有 Redis sandbox `EPERM 127.0.0.1:6379` stderr，但测试任务成功
+- Range 与路径安全：
+  - `parseHttpRange()` 区分未带 Range 与非法 Range
+  - 支持 `bytes=0-99`、`bytes=100-`、`bytes=-500`
+  - 超出文件大小的 end 会截断到文件末尾
+  - 非法 Range 返回 `kind: "invalid"`，controller 返回 `416` 并设置 `Content-Range: bytes */{totalSize}`
+  - cache path 判断改为 `path.resolve + path.relative`，不再依赖 `startsWith`
+  - `getLocalAudioCachePaths()` 拒绝 traversal 输入，保留 safe cache key 约束
+- `ContentsService` 小步收口：
+  - 新增 `local-audio-conversion.service.ts`
+  - 抽出 ffmpeg 可用性检查、B 站 mobile playable URL 解析和 ffmpeg 子进程执行
+  - controller 调用和现有 public method 行为保持兼容
+- 生产配置加固：
+  - `NODE_ENV=production` 时禁止默认 `JWT_SECRET=change-me`
+  - `NODE_ENV=production` 时禁止默认 `ALPHA_LOGIN_CODE=246810`
+  - `NODE_ENV=production` 时禁止默认 `ALPHA_INVITE_CODE=alpha-50`
+  - 生产环境必须配置 `CORS_ALLOWED_ORIGINS`
+  - 开发环境未配置 CORS 白名单时仍保持本地宽松
+  - 更新 `apps/api/.env.example`
+- debug / experimental 隔离：
+  - 新增 `ENABLE_DEBUG_ROUTES`、`ENABLE_EXPERIMENTAL_ROUTES`
+  - 本地开发默认开启，生产默认关闭
+  - `/contents/debug/*` 和 `/contents/experimental/*` handler 层统一检查开关
+  - 正式导入候选封面不再返回 `/api/v1/contents/debug/cover`
+  - `apps/web` 的 `buildMediaUrl()` 支持外部图片 URL 原样返回，不给外部 URL 拼 alpha token
+- SourceCollection 用户作用域：
+  - Prisma schema 将 `SourceCollection` 唯一键从 `[platform, platformCollectionId]` 改为 `[userId, platform, platformCollectionId]`
+  - 新增 migration：`20260425133000_source_collection_user_scope`
+  - 正式路径和 experimental 路径统一使用 raw platform collection id，不再用 `${userId}:${mediaId}` workaround
+  - 重新生成 Prisma Client
+- media token 风险：
+  - 保留现有 alpha query token 兼容 `<audio>` / `<img>`
+  - 已确认日志脱敏逻辑仍在 `RequestLoggingInterceptor` / `HttpExceptionFilter`
+  - 在前后端媒体 URL 入口处增加 TODO，下一轮改短期签名 URL
+
+### 本轮没做
+
+- 没有把缓存/转码改成 BullMQ 队列化：当前同步串行缓存对 alpha 排查仍更直接，下一轮再做 worker 化。
+- 没有重写 `apps/web` 页面或改 UI 文案：现有 `page.tsx` 和 `playlist/page.tsx` 还在可读范围内，本轮优先收安全和后端边界。
+- 没有实现短期签名媒体 URL：会影响 `<audio>` / `<img>` 鉴权链路，本轮只隔离 TODO 和确认日志脱敏。
+- 没有改动 `apps/admin`、`apps/mobile`、`experiments/local-audio-clean-room` 的正式产品实现边界。
+
+### 影响目录
+
+- `apps/api`
+- `apps/web`
+- `packages/api-contract`
+- `packages/config`
+- `docs/development_log.md`
+
+### 本轮已执行验证
+
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm --filter @ai-music-playlist/api test -- src/modules/contents/local-audio-cache.test.ts`
+- `pnpm --filter @ai-music-playlist/api test -- src/config/env.test.ts src/modules/contents/bilibili-import-preview.test.ts src/modules/contents/bilibili-cover.test.ts`
+- `pnpm --filter @ai-music-playlist/web test -- lib/api.test.ts`
+- `pnpm --filter @ai-music-playlist/api-contract test`
+- `pnpm --filter @ai-music-playlist/api typecheck`
+- `pnpm --filter @ai-music-playlist/api exec prisma generate --schema prisma/schema.prisma`
+- `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ai_music_playlist pnpm --filter @ai-music-playlist/api exec prisma validate --schema prisma/schema.prisma`
+- `git diff --check`
+
+补充说明：
+
+- `pnpm --filter @ai-music-playlist/api exec prisma validate --schema prisma/schema.prisma` 如果不带 `DATABASE_URL` 会因为 Prisma CLI 读取不到 env 失败；带本地示例 `DATABASE_URL` 后 schema validate 通过。
+- `pnpm test` 仍有既有 Redis sandbox `EPERM 6379` stderr，测试任务本身通过。
+
+### 当前剩余问题
+
+- 正式 Web Alpha 主链路仍建议再跑真实浏览器 smoke：登录、导入、筛选、缓存、播放、封面、Range。
+- 媒体 URL 仍使用 alpha access token query 兼容原生媒体元素，下一轮应改为短期签名 URL。
+- 缓存/转码仍是同步串行执行，50 用户 alpha 前应队列化并增加限流、重试、失败状态观察。
+- SourceCollection unique 已改成用户私有语义；如果已有本地库里存在 `${userId}:${mediaId}` 旧 workaround 数据，后续可能产生一次新 collection 记录，不影响用户隔离。
+
+### 下一个最合理的动作
+
+- 启动 `pnpm dev:api` + `pnpm dev:web`，用 `alpha-50 / 246810` 做真实浏览器 smoke。
+- 下一轮优先做短期签名 media URL：
+  - token 绑定 `userId`、`cacheKey`、`resourceType`、`expiresAt`
+  - 有效期 5-15 分钟
+  - 保持 `<audio>` / `<img>` 可直接请求
+- 再下一步把 `cacheImportItemsForUser()` / `cacheBilibiliAudioForUser()` 的同步执行点抽成 ConversionTask worker 接口，再接 BullMQ。
+
+---
+
+## 2026-04-25 14:06 CST
+
+### 本轮目标
+
+排查本地 Web `3020` 可访问后，Alpha 登录点击返回 `Internal server error` 的问题。
+
+### 本轮完成
+
+- 确认 `3020` 上一度存在旧 Next dev 进程卡死：端口监听但请求 20 秒无响应。
+- 用 `3021` 启动对照 Web dev server，确认页面代码可正常返回 `200 OK`。
+- 释放旧 `3020` 进程后重新启动 `pnpm dev:web`，确认 `http://127.0.0.1:3020/` 返回 `200 OK`。
+- 启动 `pnpm dev:api`，确认 `http://127.0.0.1:4000/api/v1/health` 正常。
+- 复现登录接口：
+  - `POST /api/v1/auth/verify-code`
+  - 原始结果为 `500 Internal Server Error`
+- 查明根因：
+  - 本机 `localhost:5432` 没有 Postgres 监听
+  - 当前环境没有 `docker`、`postgres`、`psql` 命令
+  - `AuthService.verifyCode()` 在 `prisma.user.upsert()` 时遇到数据库不可达
+- 修复登录错误边界：
+  - 邀请码/验证码错误返回 `401`
+  - 数据库不可达返回 `503`
+  - 前端不再只看到泛化 `Internal server error`
+
+### 影响目录
+
+- `apps/api/src/modules/auth`
+- `docs/development_log.md`
+
+### 本轮已执行验证
+
+- `curl --max-time 10 -i -sS -X POST http://127.0.0.1:4000/api/v1/auth/verify-code ...`
+- `curl --max-time 5 -sS http://127.0.0.1:4000/api/v1/health`
+- `curl --max-time 10 -I http://127.0.0.1:3020/`
+- `pnpm --filter @ai-music-playlist/api test -- src/modules/auth/auth.service.test.ts src/modules/auth/alpha-auth.test.ts`
+- `pnpm --filter @ai-music-playlist/api typecheck`
+
+### 当前剩余问题
+
+- 登录仍然需要本地 Postgres 真的启动并迁移完成；当前机器没有 Docker/Postgres 可执行文件，所以只能把错误变清楚，不能凭空完成数据库启动。
+- 如果使用 Docker，下一步应先安装/启动 Docker，再运行 `infra/docker-compose.yml` 里的 Postgres/Redis。
+
+### 下一个最合理的动作
+
+- 准备本地数据库：
+  - Docker 路线：`docker compose -f infra/docker-compose.yml up -d postgres redis`
+  - 或安装本机 PostgreSQL 16，并创建 `ai_music_playlist`
+- 然后运行 Prisma migration，再重新走 Alpha 登录。

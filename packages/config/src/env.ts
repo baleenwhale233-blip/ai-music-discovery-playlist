@@ -5,12 +5,16 @@ export const rootEnvSchema = z.object({
 });
 
 export const apiEnvSchema = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().default(4000),
   API_PREFIX: z.string().default("api/v1"),
   DATABASE_URL: z.string().default("postgresql://postgres:postgres@localhost:5432/ai_music_playlist"),
   REDIS_URL: z.string().default("redis://localhost:6379"),
   JWT_SECRET: z.string().default("change-me"),
-  SMS_PROVIDER: z.string().default("placeholder")
+  SMS_PROVIDER: z.string().default("placeholder"),
+  CORS_ALLOWED_ORIGINS: z.string().default(""),
+  ENABLE_EXPERIMENTAL_ROUTES: z.string().optional(),
+  ENABLE_DEBUG_ROUTES: z.string().optional()
 });
 
 export const mobileEnvSchema = z.object({

@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import type {
   AuthRequestCodeInput,
   AuthVerifyCodeInput,
@@ -26,25 +26,42 @@ export class AuthService {
   }
 
   async verifyCode(payload: AuthVerifyCodeInput): Promise<AuthVerifyCodeResponse> {
-    const login = validateAlphaLoginInput(payload, {
-      alphaLoginCode: appEnv.ALPHA_LOGIN_CODE,
-      alphaInviteCode: appEnv.ALPHA_INVITE_CODE
-    });
-    const user = await this.prisma.user.upsert({
-      where: {
-        phoneOrEmail: login.phoneOrEmail
-      },
-      create: {
-        phoneOrEmail: login.phoneOrEmail,
-        nickname: login.phoneOrEmail.includes("@")
-          ? login.phoneOrEmail.split("@")[0] ?? "Alpha User"
-          : `用户${login.phoneOrEmail.slice(-4)}`,
-        status: "ACTIVE"
-      },
-      update: {
-        status: "ACTIVE"
+    let login: ReturnType<typeof validateAlphaLoginInput>;
+
+    try {
+      login = validateAlphaLoginInput(payload, {
+        alphaLoginCode: appEnv.ALPHA_LOGIN_CODE,
+        alphaInviteCode: appEnv.ALPHA_INVITE_CODE
+      });
+    } catch (error) {
+      throw new UnauthorizedException(error instanceof Error ? error.message : "Invalid alpha login");
+    }
+
+    let user: { id: string; phoneOrEmail: string; nickname: string };
+
+    try {
+      user = await this.prisma.user.upsert({
+        where: {
+          phoneOrEmail: login.phoneOrEmail
+        },
+        create: {
+          phoneOrEmail: login.phoneOrEmail,
+          nickname: login.phoneOrEmail.includes("@")
+            ? login.phoneOrEmail.split("@")[0] ?? "Alpha User"
+            : `用户${login.phoneOrEmail.slice(-4)}`,
+          status: "ACTIVE"
+        },
+        update: {
+          status: "ACTIVE"
+        }
+      });
+    } catch (error) {
+      if (this.isPrismaUnavailable(error)) {
+        throw new ServiceUnavailableException("Database is unavailable. Start local Postgres before logging in.");
       }
-    });
+
+      throw error;
+    }
     const accessToken = signAlphaAccessToken({
       secret: appEnv.JWT_SECRET,
       userId: user.id,
@@ -62,5 +79,17 @@ export class AuthService {
         nickname: user.nickname
       }
     };
+  }
+
+  private isPrismaUnavailable(error: unknown) {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    return (
+      error.name === "PrismaClientInitializationError" ||
+      error.message.includes("Environment variable not found: DATABASE_URL") ||
+      error.message.includes("Can't reach database server")
+    );
   }
 }

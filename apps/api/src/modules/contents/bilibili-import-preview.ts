@@ -34,9 +34,7 @@ function resolvePreviewLimit(limit: number | undefined) {
 }
 
 export function buildRemoteBilibiliCoverUrl(coverUrl: string | null | undefined) {
-  const normalized = normalizeBilibiliCoverUrl(coverUrl ?? null);
-
-  return normalized ? `/api/v1/contents/debug/cover?url=${encodeURIComponent(normalized)}` : null;
+  return normalizeBilibiliCoverUrl(coverUrl ?? null);
 }
 
 function mapFavoriteItem(input: {

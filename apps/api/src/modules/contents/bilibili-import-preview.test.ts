@@ -91,6 +91,6 @@ describe("fetchBilibiliImportPreview", () => {
     expect(preview.items).toHaveLength(2);
     expect(requestedUrls).toHaveLength(2);
     expect(requestedUrls.every((url) => url.includes("ps=20"))).toBe(true);
-    expect(preview.items[0]?.coverUrl).toContain("/api/v1/contents/debug/cover?url=");
+    expect(preview.items[0]?.coverUrl).toBe("https://i0.hdslb.com/bfs/archive/cover.jpg");
   });
 });

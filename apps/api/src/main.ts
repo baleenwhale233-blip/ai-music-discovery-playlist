@@ -8,11 +8,19 @@ import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { RequestLoggingInterceptor } from "./common/interceptors/request-logging.interceptor";
 import { appEnv } from "./config/env";
 
+function getCorsOriginSetting() {
+  if (appEnv.CORS_ALLOWED_ORIGINS.length > 0) {
+    return appEnv.CORS_ALLOWED_ORIGINS;
+  }
+
+  return appEnv.NODE_ENV === "production" ? [] : true;
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.enableCors({
-    origin: true,
+    origin: getCorsOriginSetting(),
     credentials: false
   });
   app.setGlobalPrefix(appEnv.API_PREFIX);

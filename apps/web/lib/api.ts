@@ -56,10 +56,15 @@ export function buildMediaUrl(path: string | null) {
     return null;
   }
 
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
   const token = getStoredToken();
   const url = new URL(buildApiUrl(path));
 
   if (token) {
+    // TODO: Replace long-lived alpha access_token media URLs with short-lived signed media URLs.
     url.searchParams.set("access_token", token);
   }
 

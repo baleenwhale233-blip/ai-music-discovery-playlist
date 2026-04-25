@@ -208,7 +208,7 @@ model SourceCollection {
   playlists           Playlist[]
   conversionTasks     ConversionTask[]
 
-  @@unique([platform, platformCollectionId])
+  @@unique([userId, platform, platformCollectionId])
   @@index([userId, createdAt])
   @@map("source_collections")
 }

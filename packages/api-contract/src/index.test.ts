@@ -98,7 +98,7 @@ describe("api-contract package", () => {
           bvid: "BV1B7411m7LV",
           title: "Song 1",
           url: "https://www.bilibili.com/video/BV1B7411m7LV",
-          coverUrl: "/api/v1/contents/debug/cover?url=https%3A%2F%2Fi0.hdslb.com%2Fcover.jpg",
+          coverUrl: "https://i0.hdslb.com/cover.jpg",
           ownerName: "UP",
           durationSeconds: 120,
           isExcluded: false,

@@ -1,7 +1,6 @@
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
-import { spawn, spawnSync } from "node:child_process";
-import { accessSync, constants, createReadStream, existsSync, rmSync, statSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { createReadStream, existsSync, rmSync, statSync } from "node:fs";
+import { isAbsolute, join, relative } from "node:path";
 import {
   bilibiliFavoritePreviewRequestSchema,
   bilibiliParseRequestSchema,
@@ -38,18 +37,17 @@ import {
   parseBilibiliFavoriteLink,
   parseBilibiliLink
 } from "./bilibili-link.parser";
+import { LocalAudioConversionService } from "./local-audio-conversion.service";
 import {
   buildFfmpegAudioExtractArgs,
   BILIBILI_DESKTOP_USER_AGENT,
-  BILIBILI_MOBILE_USER_AGENT,
   ensureAudioCacheDir,
   findCachedAudioFile,
   findCachedCoverFile,
   getLocalAudioCachePaths,
+  isPathInsideRoot,
   listLocalAudioCacheKeys,
-  parseBilibiliMobileHtml5Playback,
   readLocalAudioCacheMetadata,
-  resolveCookiesFromBrowserArgs,
   toSafeCacheKey,
   writeLocalAudioCacheMetadata
 } from "./local-audio-cache";
@@ -100,7 +98,10 @@ export class ContentsService {
   private readonly experimentalPlaylistName = "实验本地听单";
   private readonly localAudioPlaylistName = "我的本地听单";
 
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(LocalAudioConversionService) private readonly localAudioConversion: LocalAudioConversionService,
+  ) {}
 
   async previewImportForUser(
     userId: string,
@@ -112,19 +113,19 @@ export class ContentsService {
       limit: payload.limit,
       fetchImpl: globalThis.fetch
     });
-    const scopedCollectionId = `${userId}:${preview.mediaId}`;
     const collection = await this.prisma.sourceCollection.upsert({
       where: {
-        platform_platformCollectionId: {
+        userId_platform_platformCollectionId: {
+          userId,
           platform: "BILIBILI",
-          platformCollectionId: scopedCollectionId
+          platformCollectionId: preview.mediaId
         }
       },
       create: {
         userId,
         platform: "BILIBILI",
         collectionType: preview.sourceType === "collection" ? "PLAYLIST" : "FAVORITES",
-        platformCollectionId: scopedCollectionId,
+        platformCollectionId: preview.mediaId,
         sourceUrl: payload.url,
         title: preview.title,
         itemCountSnapshot: preview.totalCount,
@@ -555,7 +556,7 @@ export class ContentsService {
   }
 
   async cacheBilibiliAudio(input: LocalAudioCacheRequest): Promise<LocalAudioCacheResponse> {
-    this.assertExecutableAvailable("ffmpeg");
+    this.localAudioConversion.assertExecutableAvailable("ffmpeg");
 
     const payload = localAudioCacheRequestSchema.parse(input);
     const parsed = await this.parseBilibiliLink({ url: payload.url });
@@ -572,11 +573,11 @@ export class ContentsService {
 
     if (!audioFile) {
       cached = false;
-      const playUrl = await this.fetchBilibiliMobilePlayableUrl({
+      const playUrl = await this.localAudioConversion.fetchBilibiliMobilePlayableUrl({
         bvid: parsed.bvid,
         page: parsed.page
       });
-      await this.runFfmpeg(buildFfmpegAudioExtractArgs({
+      await this.localAudioConversion.runFfmpeg(buildFfmpegAudioExtractArgs({
         sourceUrl: playUrl,
         outputAudioPath: paths.outputAudioPath
       }));
@@ -647,7 +648,7 @@ export class ContentsService {
           storageType: "SELF_HOSTED_NODE",
           relativeFilePath: audioFile ? this.getRelativeCacheFilePath(paths.root, audioFile) : null,
           coverRelativePath:
-            coverFile && coverFile.startsWith(paths.root)
+            coverFile && isPathInsideRoot(paths.root, coverFile)
               ? this.getRelativeCacheFilePath(paths.root, coverFile)
               : null,
           mimeType: this.getAudioContentType(audioFile),
@@ -661,7 +662,7 @@ export class ContentsService {
           storageType: "SELF_HOSTED_NODE",
           relativeFilePath: audioFile ? this.getRelativeCacheFilePath(paths.root, audioFile) : null,
           coverRelativePath:
-            coverFile && coverFile.startsWith(paths.root)
+            coverFile && isPathInsideRoot(paths.root, coverFile)
               ? this.getRelativeCacheFilePath(paths.root, coverFile)
               : null,
           mimeType: this.getAudioContentType(audioFile),
@@ -770,7 +771,8 @@ export class ContentsService {
 
     const collection = await this.prisma.sourceCollection.upsert({
       where: {
-        platform_platformCollectionId: {
+        userId_platform_platformCollectionId: {
+          userId: user.id,
           platform: "BILIBILI",
           platformCollectionId: parsed.mediaId
         }
@@ -1155,7 +1157,7 @@ export class ContentsService {
   }
 
   private async cacheBilibiliAudioForUser(userId: string, input: LocalAudioCacheRequest) {
-    this.assertExecutableAvailable("ffmpeg");
+    this.localAudioConversion.assertExecutableAvailable("ffmpeg");
 
     const payload = localAudioCacheRequestSchema.parse(input);
     const parsed = await this.parseBilibiliLink({ url: payload.url });
@@ -1172,11 +1174,11 @@ export class ContentsService {
 
     if (!audioFile) {
       cached = false;
-      const playUrl = await this.fetchBilibiliMobilePlayableUrl({
+      const playUrl = await this.localAudioConversion.fetchBilibiliMobilePlayableUrl({
         bvid: parsed.bvid,
         page: parsed.page
       });
-      await this.runFfmpeg(buildFfmpegAudioExtractArgs({
+      await this.localAudioConversion.runFfmpeg(buildFfmpegAudioExtractArgs({
         sourceUrl: playUrl,
         outputAudioPath: paths.outputAudioPath
       }));
@@ -1245,7 +1247,7 @@ export class ContentsService {
         storageType: "SELF_HOSTED_NODE",
         relativeFilePath: this.getRelativeCacheFilePath(this.localAudioCacheRoot, audioFile),
         coverRelativePath:
-          coverFile && coverFile.startsWith(this.localAudioCacheRoot)
+          coverFile && isPathInsideRoot(this.localAudioCacheRoot, coverFile)
             ? this.getRelativeCacheFilePath(this.localAudioCacheRoot, coverFile)
             : null,
         mimeType: this.getAudioContentType(audioFile),
@@ -1259,7 +1261,7 @@ export class ContentsService {
         storageType: "SELF_HOSTED_NODE",
         relativeFilePath: this.getRelativeCacheFilePath(this.localAudioCacheRoot, audioFile),
         coverRelativePath:
-          coverFile && coverFile.startsWith(this.localAudioCacheRoot)
+          coverFile && isPathInsideRoot(this.localAudioCacheRoot, coverFile)
             ? this.getRelativeCacheFilePath(this.localAudioCacheRoot, coverFile)
             : null,
         mimeType: this.getAudioContentType(audioFile),
@@ -1525,7 +1527,11 @@ export class ContentsService {
   }
 
   private getRelativeCacheFilePath(root: string, filePath: string) {
-    return filePath.replace(`${root}/`, "");
+    if (!isPathInsideRoot(root, filePath)) {
+      throw new BadRequestException("Audio cache path escapes cache root");
+    }
+
+    return relative(root, filePath);
   }
 
   private isPrismaUnavailable(error: unknown) {
@@ -1538,115 +1544,6 @@ export class ContentsService {
       error.message.includes("Environment variable not found: DATABASE_URL") ||
       error.message.includes("Can't reach database server")
     );
-  }
-
-  private assertExecutableAvailable(command: string) {
-    for (const candidate of [`/opt/homebrew/bin/${command}`, `/usr/local/bin/${command}`]) {
-      try {
-        accessSync(candidate, constants.X_OK);
-        return;
-      } catch {
-        // Keep checking common locations and PATH.
-      }
-    }
-
-    const check = spawnSync(command, ["--version"], {
-      stdio: "ignore"
-    });
-
-    if (check.status !== 0) {
-      throw new BadRequestException(
-        `${command} is required for this local audio experiment. Install it with: brew install yt-dlp ffmpeg`,
-      );
-    }
-  }
-
-  private async fetchBilibiliMobilePlayableUrl(input: { bvid: string; page: number }) {
-    const response = await fetch(`https://m.bilibili.com/video/${input.bvid}?p=${input.page}`, {
-      headers: {
-        "user-agent": BILIBILI_MOBILE_USER_AGENT,
-        referer: "https://m.bilibili.com/"
-      }
-    });
-
-    if (!response.ok) {
-      throw new BadRequestException(`Bilibili mobile page request failed with ${response.status}`);
-    }
-
-    const html = await response.text();
-
-    try {
-      return parseBilibiliMobileHtml5Playback({ html }).playUrl;
-    } catch (error) {
-      throw new BadRequestException(
-        error instanceof Error ? error.message : "Unable to resolve bilibili mobile play url",
-      );
-    }
-  }
-
-  private runYtDlp(args: string[]) {
-    return new Promise<void>((resolve, reject) => {
-      const child = spawn("yt-dlp", args, {
-        stdio: ["ignore", "pipe", "pipe"]
-      });
-      const stderr: string[] = [];
-
-      child.stderr.on("data", (chunk: Buffer) => {
-        stderr.push(chunk.toString("utf8"));
-      });
-      child.on("error", (error) => reject(error));
-      child.on("close", (code) => {
-        if (code === 0) {
-          resolve();
-          return;
-        }
-
-        reject(new BadRequestException(stderr.join("").trim() || `yt-dlp exited with ${code}`));
-      });
-    });
-  }
-
-  private runFfmpeg(args: string[]) {
-    return new Promise<void>((resolve, reject) => {
-      const child = spawn("ffmpeg", args, {
-        stdio: ["ignore", "pipe", "pipe"]
-      });
-      const stderr: string[] = [];
-
-      child.stderr.on("data", (chunk: Buffer) => {
-        stderr.push(chunk.toString("utf8"));
-      });
-      child.on("error", (error) => reject(error));
-      child.on("close", (code) => {
-        if (code === 0) {
-          resolve();
-          return;
-        }
-
-        reject(new BadRequestException(stderr.join("").trim() || `ffmpeg exited with ${code}`));
-      });
-    });
-  }
-
-  private getCookiesFromBrowserArgs() {
-    return resolveCookiesFromBrowserArgs([
-      {
-        browser: "chrome",
-        available: existsSync("/Applications/Google Chrome.app")
-      },
-      {
-        browser: "safari",
-        available: existsSync("/Applications/Safari.app")
-      },
-      {
-        browser: "edge",
-        available: existsSync("/Applications/Microsoft Edge.app")
-      },
-      {
-        browser: "firefox",
-        available: existsSync("/Applications/Firefox.app")
-      }
-    ]);
   }
 
   private getAudioContentType(filePath: string) {

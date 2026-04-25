@@ -14,6 +14,7 @@ export class AlphaAuthGuard implements CanActivate {
       }
     >();
     const authorization = request.headers.authorization;
+    // TODO: Replace long-lived query access_token media auth with short-lived signed media URLs.
     const queryToken = request.query?.access_token;
     const token = authorization?.startsWith("Bearer ")
       ? authorization.slice("Bearer ".length)

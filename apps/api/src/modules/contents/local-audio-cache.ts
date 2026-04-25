@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 
 const AUDIO_EXTENSIONS = new Set([".m4a", ".mp3", ".aac", ".opus", ".webm"]);
 const METADATA_FILE_NAME = "metadata.json";
@@ -20,10 +20,15 @@ export function toSafeCacheKey(input: string) {
 
 export function getLocalAudioCachePaths(input: { cacheRoot: string; cacheKey: string }) {
   const safeKey = toSafeCacheKey(input.cacheKey);
+
+  if (safeKey !== input.cacheKey) {
+    throw new Error("Invalid cache key");
+  }
+
   const root = resolve(input.cacheRoot);
   const itemDir = resolve(root, safeKey);
 
-  if (!itemDir.startsWith(root)) {
+  if (!isPathInsideRoot(root, itemDir)) {
     throw new Error("Audio cache path escapes cache root");
   }
 
@@ -34,6 +39,14 @@ export function getLocalAudioCachePaths(input: { cacheRoot: string; cacheKey: st
     outputAudioPath: join(itemDir, "audio.m4a"),
     metadataPath: join(itemDir, METADATA_FILE_NAME)
   };
+}
+
+export function isPathInsideRoot(cacheRoot: string, candidatePath: string) {
+  const root = resolve(cacheRoot);
+  const candidate = resolve(candidatePath);
+  const relativePath = relative(root, candidate);
+
+  return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
 }
 
 export function ensureAudioCacheDir(path: string) {
@@ -277,28 +290,98 @@ export function findCachedCoverFile(itemDir: string) {
   return files[0] ?? null;
 }
 
-export function parseHttpRange(rangeHeader: string | undefined, totalSize: number) {
-  if (!rangeHeader || !rangeHeader.startsWith("bytes=") || totalSize <= 0) {
+export type ParsedHttpRange =
+  | {
+      kind: "range";
+      start: number;
+      end: number;
+      chunkSize: number;
+      totalSize: number;
+      contentRange: string;
+    }
+  | {
+      kind: "invalid";
+      totalSize: number;
+      contentRange: string;
+    };
+
+function invalidHttpRange(totalSize: number): ParsedHttpRange {
+  return {
+    kind: "invalid",
+    totalSize,
+    contentRange: `bytes */${Math.max(totalSize, 0)}`
+  };
+}
+
+export function parseHttpRange(rangeHeader: string | undefined, totalSize: number): ParsedHttpRange | null {
+  if (!rangeHeader) {
     return null;
   }
 
-  const [startRaw, endRaw] = rangeHeader.replace("bytes=", "").split("-");
-  const start = Number(startRaw);
-
-  if (!Number.isFinite(start) || start < 0 || start >= totalSize) {
-    return null;
+  if (!rangeHeader.startsWith("bytes=") || totalSize <= 0) {
+    return invalidHttpRange(totalSize);
   }
 
-  const requestedEnd = endRaw ? Number(endRaw) : totalSize - 1;
-  const end = Math.min(Number.isFinite(requestedEnd) ? requestedEnd : totalSize - 1, totalSize - 1);
+  const ranges = rangeHeader.slice("bytes=".length).split(",");
+
+  if (ranges.length !== 1) {
+    return invalidHttpRange(totalSize);
+  }
+
+  const rangeSpec = ranges[0] ?? "";
+
+  if (!rangeSpec.includes("-")) {
+    return invalidHttpRange(totalSize);
+  }
+
+  const parts = rangeSpec.split("-");
+
+  if (parts.length !== 2) {
+    return invalidHttpRange(totalSize);
+  }
+
+  const [startRaw = "", endRaw = ""] = parts;
+
+  let start: number;
+  let end: number;
+
+  if (startRaw === "") {
+    const suffixLength = Number(endRaw);
+
+    if (!Number.isFinite(suffixLength) || !Number.isInteger(suffixLength) || suffixLength <= 0) {
+      return invalidHttpRange(totalSize);
+    }
+
+    start = Math.max(totalSize - suffixLength, 0);
+    end = totalSize - 1;
+  } else {
+    start = Number(startRaw);
+
+    if (!Number.isFinite(start) || !Number.isInteger(start) || start < 0 || start >= totalSize) {
+      return invalidHttpRange(totalSize);
+    }
+
+    if (endRaw === "") {
+      end = totalSize - 1;
+    } else {
+      const requestedEnd = Number(endRaw);
+
+      if (!Number.isFinite(requestedEnd) || !Number.isInteger(requestedEnd)) {
+        return invalidHttpRange(totalSize);
+      }
+
+      end = Math.min(requestedEnd, totalSize - 1);
+    }
+  }
 
   if (end < start) {
-    return null;
+    return invalidHttpRange(totalSize);
   }
 
   const chunkSize = end - start + 1;
 
   return {
+    kind: "range",
     start,
     end,
     chunkSize,
