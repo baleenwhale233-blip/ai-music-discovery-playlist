@@ -47,6 +47,39 @@ Mobile Web First
 
 建议使用 Node 22 LTS。本仓库已经提供 `.nvmrc` 和 `.node-version`；不要把 Node 25.3.0 作为日常验证环境，因为当前 Next / Nest / tsx 开发链路在过新的 Node 上更容易出现缓存、监听和热更新异常。
 
+### Alpha 环境检查
+
+正式 Mobile Web Alpha 的本地环境以 CLI 为准，VS Code 只是可选快捷入口。启动 API/Web 前，先跑：
+
+```bash
+pnpm preflight:alpha
+```
+
+它会检查：
+
+- Node 22
+- pnpm 与依赖安装状态
+- `3020` Web 端口和 `4000` API 端口是否空闲或健康响应
+- `5432` PostgreSQL 是否可达
+- Prisma migration 状态
+- `ffmpeg` / `yt-dlp`
+- Redis 可达性（当前 Alpha smoke 只警告，不作为硬阻塞）
+
+如果使用本机 PostgreSQL（推荐 Homebrew PostgreSQL 16），先安装并启动：
+
+```bash
+brew install postgresql@16
+brew services start postgresql@16
+```
+
+然后运行：
+
+```bash
+pnpm setup:alpha-db
+```
+
+这个脚本会优先使用 `apps/api/.env` 里的 `DATABASE_URL`；如果本地还没有该文件，会从 `apps/api/.env.example` 生成开发用 `.env`，创建 `ai_music_playlist` 数据库，并执行 Prisma migration / generate。它不要求 Docker；Docker 只是不想装本机 PostgreSQL 时的替代方案。
+
 ### 当前最接近真实产品价值的实验页
 
 如果当前目标是先验证核心产品链路，优先使用隔离的 clean-room 实验入口：
@@ -111,6 +144,14 @@ pnpm dev:web
 - `ALPHA_LOGIN_CODE=246810`
 
 正式 Web 只接 `/api/v1` 稳定端点，不直接依赖 `experiments/local-audio-clean-room`。clean-room 继续作为“核心链路是否成立”的参考实现和回归样本。
+
+如果两个服务都已经启动，可以用下面的 smoke 命令确认 API、Web 和 Alpha 登录都可用：
+
+```bash
+pnpm verify:alpha-web
+```
+
+如果你使用 VS Code，可以运行 `Run and Debug -> Alpha Web (Dev)`，它只是先检查 `3020/4000` 是否适合新开 dev session，再启动同一套 `pnpm dev:api` 和 `pnpm dev:web`。
 
 如果要验证“B 站链接 -> 本地音频缓存 -> 原生 audio 播放器 -> 实验听单”，可以双击：
 

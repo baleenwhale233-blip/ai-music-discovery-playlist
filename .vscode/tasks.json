@@ -2,6 +2,48 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "alpha:preflight-before-dev",
+      "type": "shell",
+      "command": "pnpm preflight:alpha -- --require-free-dev-ports",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "alpha:preflight",
+      "type": "shell",
+      "command": "pnpm preflight:alpha",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "alpha:verify-web",
+      "type": "shell",
+      "command": "pnpm verify:alpha-web",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "stop-local-audio-experiment",
       "type": "shell",
       "command": "./stop-local-audio-experiment.command",

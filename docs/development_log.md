@@ -1699,3 +1699,258 @@ Mobile Web First
   - Docker 路线：`docker compose -f infra/docker-compose.yml up -d postgres redis`
   - 或安装本机 PostgreSQL 16，并创建 `ai_music_playlist`
 - 然后运行 Prisma migration，再重新走 Alpha 登录。
+
+---
+
+## 2026-04-25 14:58 CST
+
+### 本轮目标
+
+降低 Alpha Web 本地测试的环境类 bug 率，优先把环境前置检查、数据库准备和 smoke 验证收敛为 CLI-first 的固定入口；VS Code 只保留为同一套脚本的快捷入口。
+
+### 本轮完成
+
+- 新增 Alpha 环境脚本：
+  - `pnpm preflight:alpha`
+  - `pnpm setup:alpha-db`
+  - `pnpm verify:alpha-web`
+- `preflight:alpha` 检查：
+  - Node 22
+  - pnpm 版本
+  - `node_modules`
+  - `ffmpeg` / `yt-dlp`
+  - API `4000` 与 Web `3020` 端口是否空闲或健康响应
+  - PostgreSQL `5432` 是否可达
+  - Prisma migration 状态
+  - Redis `6379` 可达性（当前只警告，不阻塞）
+- `setup:alpha-db` 走本机 PostgreSQL / Homebrew 优先路线：
+  - 如果缺 `psql`，直接提示 `brew install postgresql@16` 和 `brew services start postgresql@16`
+  - 如果已有 `apps/api/.env`，尊重其中的 `DATABASE_URL`
+  - 如果没有本地 env，会在可连接 PostgreSQL 后从 `.env.example` 生成开发用 `apps/api/.env`
+  - 创建 `ai_music_playlist` 数据库并执行 Prisma migration / generate
+- `verify:alpha-web` 在 API/Web 已启动后做 smoke：
+  - API health
+  - Web root
+  - Alpha 登录接口，不打印 token
+- VS Code 新增 `Alpha Web (Dev)` compound：
+  - 先跑 `alpha:preflight-before-dev`
+  - 要求 `3020/4000` 空闲，避免旧进程或已启动服务导致再次撞端口
+  - 再启动同一套 `pnpm dev:api` 和 `pnpm dev:web`
+- README 新增 Alpha 环境检查说明，明确 Docker 不是硬依赖，VS Code 不是测试环境标准路径。
+
+### 影响目录
+
+- `scripts`
+- `.vscode`
+- `README.md`
+- `package.json`
+- `docs/development_log.md`
+
+### 本轮已执行验证
+
+- `node --check scripts/lib/alpha-env.mjs`
+- `node --check scripts/alpha-preflight.mjs`
+- `node --check scripts/alpha-db-setup.mjs`
+- `node --check scripts/alpha-web-verify.mjs`
+- `pnpm exec prettier --check package.json .vscode/tasks.json .vscode/launch.json README.md scripts/*.mjs scripts/lib/*.mjs`
+- `pnpm preflight:alpha`
+- `pnpm preflight:alpha -- --require-free-dev-ports`
+- `pnpm setup:alpha-db`
+- `pnpm verify:alpha-web`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- `git diff --check`
+
+### 当前验证结果
+
+- `pnpm lint` 通过。
+- `pnpm typecheck` 通过。
+- `pnpm test` 通过；仍有既有 Redis sandbox `EPERM 6379` stderr，但测试任务成功。
+- `pnpm preflight:alpha` 正确失败在本机缺 PostgreSQL：
+  - `localhost:5432 is not reachable`
+  - Redis 缺失只显示 warning
+- `pnpm setup:alpha-db` 正确失败在本机缺 `psql`，并提示 Homebrew PostgreSQL 16 安装/启动命令。
+- `pnpm verify:alpha-web` 正确失败在 API/Web 未启动和 PostgreSQL 未启动，输出下一步要开的服务。
+
+### 当前剩余问题
+
+- 当前机器还没有可用的本机 PostgreSQL / `psql`，所以不能完成真实 Alpha 登录 smoke。
+- `pnpm test` 的 Redis `EPERM 6379` stderr 仍是既有噪音，后续可把队列测试进一步 mock/隔离。
+- `setup:alpha-db` 当前只面向本机 PostgreSQL；Docker compose 仍保留为可选基础设施路线，但不是本轮默认路径。
+
+### 下一个最合理的动作
+
+- 安装并启动 Homebrew PostgreSQL 16：
+  - `brew install postgresql@16`
+  - `brew services start postgresql@16`
+- 运行 `pnpm setup:alpha-db`。
+- 启动 `pnpm dev:api` 和 `pnpm dev:web`。
+- 运行 `pnpm verify:alpha-web`，再做真实浏览器登录/导入/缓存/播放 smoke。
+
+---
+
+## 2026-04-25 22:50 CST
+
+### 本轮目标
+
+继续完成 Alpha 本地数据库环境准备：安装本机 PostgreSQL 16，初始化 `ai_music_playlist`，并让 `pnpm preflight:alpha` 在真实本机环境通过。
+
+### 本轮完成
+
+- 通过 Homebrew 安装 `postgresql@16`。
+- 启动 `postgresql@16` 后台服务：
+  - `brew services start postgresql@16`
+- 运行 `pnpm setup:alpha-db` 时发现一个迁移链问题：
+  - 现有 `20260425003000_web_first_local_audio` migration 是从旧 schema 升级到 Web First schema 的迁移。
+  - 全新空库缺少旧 schema 里的 `PlaybackStatus` enum，因此 fresh DB 会失败在 `type "PlaybackStatus" does not exist`。
+- 新增 initial migration：
+  - `apps/api/prisma/migrations/20260424000000_initial_schema/migration.sql`
+  - 用于空库先创建旧基础 schema，再按既有迁移升级到当前 schema。
+- 删除一个空的重复 migration 目录：
+  - `apps/api/prisma/migrations/20260425003000_web_first_local_audio 2`
+  - 该目录没有 `migration.sql`，但 Prisma 会把它计入 migration 列表。
+- 重置刚创建但 migration 失败的空本地库，重新运行 `pnpm setup:alpha-db` 成功。
+- 生成本地开发 env：
+  - `apps/api/.env`
+  - `DATABASE_URL=postgresql://yang@localhost:5432/ai_music_playlist`
+
+### 影响目录
+
+- `apps/api/prisma/migrations`
+- `docs/development_log.md`
+
+### 本轮已执行验证
+
+- `brew install postgresql@16`
+- `brew services start postgresql@16`
+- `pnpm setup:alpha-db`
+- `pnpm preflight:alpha`
+
+### 当前验证结果
+
+- `pnpm setup:alpha-db` 通过：
+  - 创建 `ai_music_playlist`
+  - `prisma migrate deploy` 成功
+  - `prisma generate` 成功
+- 普通 sandbox 内跑 `pnpm preflight:alpha` 仍会因为 sandbox 不能探测本机 `localhost:5432` 而失败。
+- 使用真实本机权限跑 `pnpm preflight:alpha` 已通过：
+  - PostgreSQL `localhost:5432` reachable
+  - Prisma migrations up to date
+  - Redis 仍是 optional warning
+
+### 当前剩余问题
+
+- API/Web 服务尚未启动，因此还没跑 `pnpm verify:alpha-web`。
+- Redis 当前没有启动；对 Alpha Web 登录/导入 smoke 不是硬阻塞，但 `pnpm test` 里队列相关 stderr 仍会有既有噪音。
+
+### 下一个最合理的动作
+
+- 启动 `pnpm dev:api` 和 `pnpm dev:web`。
+- 使用真实本机权限运行 `pnpm verify:alpha-web`。
+- 浏览器打开 `http://127.0.0.1:3020`，用 `alpha-50 / 246810` 做登录 smoke。
+
+---
+
+## 2026-04-25 22:59 CST
+
+### 本轮目标
+
+排查 `pnpm verify:alpha-web` 只有 Redis optional warning，但浏览器登录后跳转到 404 的问题。
+
+### 本轮完成
+
+- 确认 Redis warning 不是根因：
+  - `Redis port - localhost:6379 is not reachable` 当前只是 Alpha smoke optional warning。
+- 复现 Web 路由异常：
+  - `GET /` 返回 Next 404。
+  - `GET /login` 返回 Next 404。
+  - 旧状态下 `GET /playlist` 一度仍返回 200，说明问题不是 API 登录失败。
+- 重启 Web dev server 后错误变为更明确的 500：
+  - `Cannot find module apps/web/.next/server/app/page.js`
+  - `Cannot find module apps/web/.next/server/app/login/page.js`
+  - `Cannot find module apps/web/.next/server/app/playlist/page.js`
+- 确认根因：
+  - `apps/web/.next` dev 缓存/编译产物损坏。
+  - `app-paths-manifest.json` 指向 app routes，但 `.next/server/app/*/page.js` 缺失。
+- 处理方式：
+  - 停止占用 `3020` 的旧 Next dev 进程。
+  - 删除忽略目录 `apps/web/.next`。
+  - 重新启动 `pnpm dev:web`。
+- 重新验证：
+  - `GET /` 返回 200。
+  - `GET /login` 返回 200。
+  - `GET /playlist` 返回 200。
+  - `pnpm verify:alpha-web` 通过，Alpha login smoke 成功拿到 token。
+
+### 影响目录
+
+- `docs/development_log.md`
+- 未改动正式产品代码。
+- 删除并重建了 ignored dev cache：`apps/web/.next`
+
+### 本轮已执行验证
+
+- `curl http://127.0.0.1:3020/`
+- `curl http://127.0.0.1:3020/login`
+- `curl http://127.0.0.1:3020/playlist`
+- `pnpm verify:alpha-web`
+
+### 当前验证结果
+
+- `pnpm verify:alpha-web` 通过：
+  - API health 200
+  - Web root 200
+  - PostgreSQL reachable
+  - Prisma migrations up to date
+  - Alpha login smoke 成功
+- Redis 仍是 optional warning，不影响当前 Alpha 登录 smoke。
+
+### 当前剩余问题
+
+- 当前 `pnpm dev:web` 由本轮重新启动，仍在 `3020` 跑着。
+- 若之后再次出现 app route 404/500 且错误指向 `.next/server/app/*.js` 缺失，优先停 Web dev server 并删除 `apps/web/.next` 后重启。
+
+### 下一个最合理的动作
+
+- 浏览器刷新 `http://127.0.0.1:3020/login`。
+- 用 `alpha-50 / 246810` 再走一次登录，确认跳回导入页。
+
+---
+
+## 2026-04-25 23:28 CST
+
+### 本轮目标
+
+修复播放器页原生 `<audio controls>` 进度条被挤没的问题。
+
+### 本轮完成
+
+- 确认根因：
+  - `audio` 是 `.now-playing` grid 的第三个子元素。
+  - `.now-playing` 只有两列，第三个元素自动落到第二行第一列，也就是封面列。
+  - 原生 audio 控件宽度过窄时会折叠，只剩播放键、短进度和菜单。
+- 修复：
+  - 新增 `.now-playing audio { grid-column: 1 / -1; min-width: 0; }`
+  - 让原生播放器横跨整张 player card，保留真实 media element 行为。
+
+### 影响目录
+
+- `apps/web/app/globals.css`
+- `docs/development_log.md`
+
+### 本轮已执行验证
+
+- `curl http://127.0.0.1:3020/playlist`
+- `pnpm --filter @ai-music-playlist/web lint`
+- `pnpm --filter @ai-music-playlist/web typecheck`
+
+### 当前验证结果
+
+- `/playlist` 返回 200。
+- Web lint 通过。
+- Web typecheck 通过。
+
+### 当前剩余问题
+
+- 需要浏览器刷新播放器页确认原生控件实际视觉宽度恢复。

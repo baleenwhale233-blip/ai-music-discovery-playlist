@@ -288,6 +288,11 @@ audio {
   width: 100%;
 }
 
+.now-playing audio {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
 .login-card {
   width: min(480px, 100%);
   margin: 8vh auto 0;

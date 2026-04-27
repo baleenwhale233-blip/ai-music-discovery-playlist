@@ -16,6 +16,9 @@
     "dev:api": "turbo run dev --filter=@ai-music-playlist/api",
     "dev:admin": "turbo run dev --filter=@ai-music-playlist/admin",
     "dev:web": "turbo run dev --filter=@ai-music-playlist/web",
+    "preflight:alpha": "node scripts/alpha-preflight.mjs",
+    "setup:alpha-db": "node scripts/alpha-db-setup.mjs",
+    "verify:alpha-web": "node scripts/alpha-web-verify.mjs",
     "dev:local-audio-clean": "node experiments/local-audio-clean-room/server.mjs",
     "test:local-audio-clean": "node --test experiments/local-audio-clean-room/*.test.mjs",
     "verify:local-audio-clean": "node experiments/local-audio-clean-room/verify.mjs"
