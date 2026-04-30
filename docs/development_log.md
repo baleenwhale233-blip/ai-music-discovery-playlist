@@ -1954,3 +1954,131 @@ Mobile Web First
 ### 当前剩余问题
 
 - 需要浏览器刷新播放器页确认原生控件实际视觉宽度恢复。
+
+---
+
+## 2026-04-30 13:02 CST
+
+### 本轮目标
+
+根据新的 Web 产品口述方向，补一份正式 Web 端整体信息架构文档，明确登录后听单广场、底部导航、添加听单分步流程，以及发布听单只发布目录元信息的边界。
+
+### 本轮完成
+
+- 新增 `docs/2026-04-30-web-information-architecture.md`。
+- 文档明确登录后默认进入听单广场，广场展示公开听单目录元信息，不公开共享音频文件。
+- 文档定义底部三入口：
+  - `听单`
+  - `添加听单`
+  - `我的`
+- 文档定义添加听单流程：
+  - 草稿首页
+  - 二级添加视频页
+  - 链接解析后回到草稿列表
+  - 删除 / 批量管理 / 排序
+  - 标题和简介
+  - 发布目录元信息
+- 文档补充后续页面地图、接口方向和 MVP 分期。
+
+### 影响目录
+
+- `docs`
+
+### 本轮已执行验证
+
+- 文档级检查：对照 `AGENTS.md`、`README.md`、`docs/basic_ia.md` 的路线，确认新文档继续遵守“目录 -> 用户主动本地缓存 -> 听单 -> 真播放器”。
+- 未跑代码测试；本轮只新增产品信息架构文档，不修改 API 或应用代码。
+
+### 当前剩余问题
+
+- `apps/web` 现有页面仍是旧的导入页和播放器页结构，尚未按新 IA 实现。
+- 后续实现需要先补契约，再改 `apps/web` 页面和 `apps/api` 对应接口。
+
+### 下一个最合理的动作
+
+- 基于新 IA 拆下一轮实现计划：先做静态 Web 骨架和底部导航，再迁移现有导入能力到添加听单分步流程。
+
+---
+
+## 2026-04-30 13:42 CST
+
+### 本轮目标
+
+根据 Web 端新信息架构实现一版前端可用原型，并预留后续接真实后端草稿 / 发布 / 广场 API 的 repository 框架。
+
+### 本轮完成
+
+- 新增 Web 前端领域模型与 repository 接口：
+  - `apps/web/lib/playlist-domain.ts`
+  - `apps/web/lib/playlist-repository.ts`
+  - `apps/web/lib/local-playlist-repository.ts`
+  - `apps/web/lib/http-playlist-repository.ts`
+  - `apps/web/lib/playlist-repository-factory.ts`
+- 当前 repository 默认使用 localStorage 保存：
+  - 当前草稿
+  - 已发布听单目录元信息
+  - 广场种子听单
+- 预留 `NEXT_PUBLIC_PLAYLIST_DATA_SOURCE=http`，后续可替换为真实 HTTP repository。
+- 新增 repository 单元测试，覆盖：
+  - 创建 / 读取草稿
+  - 解析结果追加到草稿
+  - 去重
+  - 批量删除
+  - 上移 / 下移排序
+  - 发布目录元信息
+  - 读取广场与详情
+  - 按 collection 分组缓存已发布听单条目
+- 重做 `apps/web` 页面结构：
+  - `/` 与 `/playlists`：听单广场
+  - `/playlists/new`：添加听单草稿页
+  - `/playlists/new/add`：二级添加视频页，复用现有 `previewImport`
+  - `/playlists/[playlistId]`：听单详情页，可对真实解析条目发起缓存
+  - `/me`：我的页面
+  - `/playlist`：继续保留真实 `<audio>` 本地播放器页
+- 新增共享 Web 组件：
+  - 底部导航
+  - 登录提示
+  - 页面标题
+  - 听单卡片
+  - 听单条目行
+- 更新全局样式为移动端产品壳，底部中央 `+` 作为添加听单主入口。
+- 修复动态听单详情页 ID URL 编码问题，避免 `playlist:<uuid>` 进入详情页后找不到本地已发布听单。
+
+### 影响目录
+
+- `apps/web/app`
+- `apps/web/lib`
+- `docs`
+
+### 本轮已执行验证
+
+- `pnpm --filter @ai-music-playlist/web test`
+- `pnpm --filter @ai-music-playlist/web lint`
+- `pnpm --filter @ai-music-playlist/web typecheck`
+- `pnpm --filter @ai-music-playlist/web build`
+- 浏览器 smoke：
+  - 打开 `http://127.0.0.1:3020/playlists`
+  - 注入 alpha token 后确认听单广场显示
+  - 注入本地草稿后从 `/playlists/new` 发布
+  - 确认发布后的听单在详情页、`/me` 和广场可见
+  - 打开 `/playlists/new/add` 确认二级添加视频页显示
+  - 移动端 390x844 截图检查广场与底部导航布局
+
+### 当前验证结果
+
+- Web 单元测试通过：2 个测试文件，7 个测试通过。
+- Web lint 通过。
+- Web typecheck 通过。
+- Web build 通过。
+- 浏览器 smoke 覆盖了前端草稿、发布、广场、我的、二级添加页。
+
+### 当前剩余问题
+
+- 本轮不做 DB migration，不改真实后端 controller。
+- 草稿、发布听单、广场列表和听单详情当前仍是 localStorage 原型数据。
+- `/me` 与 `/playlist` 读取最近本地缓存仍依赖现有 API；若本地 API 未启动，浏览器会看到 `127.0.0.1:4000` 连接失败，但页面主流程仍可显示。
+- `/playlists/new/add` 的真实链接解析仍需要 API 服务和来源网络可用；本轮浏览器 smoke 未跑真实 B 站解析。
+
+### 下一个最合理的动作
+
+- 下一轮补 `packages/api-contract` 里的正式草稿 / 发布 / 广场契约，再在 `apps/api` 增加对应 controller/service，最后把 Web repository 从 localStorage 切到 HTTP 实现。

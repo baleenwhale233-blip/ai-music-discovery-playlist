@@ -59,7 +59,7 @@ export default function LoginPage() {
         </div>
         <div className="actions">
           <button disabled={busy || !phoneOrEmail || !inviteCode || !code} onClick={handleLogin}>登录</button>
-          <Link className="button secondary" href="/">返回导入页</Link>
+          <Link className="button secondary" href="/playlists">返回听单广场</Link>
         </div>
         <div className="status">{status}</div>
       </section>

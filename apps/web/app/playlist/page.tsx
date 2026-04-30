@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { LocalAudioPlaylistItem, LocalAudioPlaylistResponse } from "@ai-music-playlist/api-contract";
 
+import { BottomNav } from "../components/bottom-nav";
 import {
   buildMediaUrl,
   clearLocalAudioPlaylist,
@@ -66,14 +67,14 @@ export default function PlaylistPage() {
   const current = items[currentIndex] ?? null;
 
   return (
-    <main className="app-shell">
+    <main className="app-shell with-bottom-nav">
       <nav className="topbar">
-        <Link className="brand" href="/">
+        <Link className="brand" href="/playlists">
           <span className="brand-mark">AI Music</span>
           <strong>本地听单</strong>
         </Link>
         <div className="nav">
-          <Link className="secondary" href="/">导入</Link>
+          <Link className="secondary" href="/playlists/new">添加</Link>
           <Link href="/playlist">听单</Link>
         </div>
       </nav>
@@ -130,6 +131,7 @@ export default function PlaylistPage() {
           </div>
         </section>
       </div>
+      <BottomNav />
     </main>
   );
 }
