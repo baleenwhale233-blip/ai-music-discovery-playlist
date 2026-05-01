@@ -14,6 +14,7 @@ export interface PlaylistRepository {
   appendImportPreviewToDraft(preview: ImportPreviewResponse): Promise<PlaylistDraft>;
   removeDraftItems(ids: string[]): Promise<PlaylistDraft>;
   moveDraftItem(id: string, direction: DraftMoveDirection): Promise<PlaylistDraft>;
+  reorderDraftItems(ids: string[]): Promise<PlaylistDraft>;
   publishDraft(): Promise<PublishedPlaylistDetail>;
   listPublishedPlaylists(): Promise<PublishedPlaylistSummary[]>;
   getPublishedPlaylist(id: string): Promise<PublishedPlaylistDetail | null>;

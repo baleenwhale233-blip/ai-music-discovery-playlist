@@ -404,10 +404,33 @@ label {
   gap: 6px;
 }
 
-.icon-button {
+.sortable-item {
+  touch-action: manipulation;
+}
+
+.sortable-item.dragging {
+  position: relative;
+  z-index: 5;
+}
+
+.sortable-item.dragging .item-row {
+  border-color: var(--accent);
+  box-shadow: 0 14px 34px rgba(255, 79, 31, 0.22);
+}
+
+.drag-handle {
   min-width: 36px;
   min-height: 36px;
   padding: 0;
+  border-color: var(--line);
+  background: #fff;
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
 
 .publish-bar {

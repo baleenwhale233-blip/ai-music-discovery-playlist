@@ -1,15 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 import { BottomNav } from "../../components/bottom-nav";
 import { LoginPrompt } from "../../components/login-prompt";
 import { PageHeader } from "../../components/page-header";
 import { PlaylistItemRow } from "../../components/playlist-item-row";
 import { getStoredToken } from "../../../lib/api";
-import type { PlaylistDraft } from "../../../lib/playlist-domain";
+import type { DraftPlaylistItem, PlaylistDraft } from "../../../lib/playlist-domain";
 import { createPlaylistRepository } from "../../../lib/playlist-repository-factory";
 
 export default function NewPlaylistPage() {
@@ -20,6 +38,22 @@ export default function NewPlaylistPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState("听单草稿会先保存在当前浏览器，后续可替换为后端草稿接口。");
   const [busy, setBusy] = useState(false);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 6
+      }
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 180,
+        tolerance: 8
+      }
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates
+    }),
+  );
 
   useEffect(() => {
     const hasToken = Boolean(getStoredToken());
@@ -57,8 +91,35 @@ export default function NewPlaylistPage() {
     }
   }
 
-  async function moveItem(id: string, direction: "up" | "down") {
-    setDraft(await repository.moveDraftItem(id, direction));
+  async function handleDragEnd(event: DragEndEvent) {
+    if (!draft || !event.over || event.active.id === event.over.id) {
+      return;
+    }
+
+    const oldIndex = draft.items.findIndex((item) => item.id === event.active.id);
+    const newIndex = draft.items.findIndex((item) => item.id === event.over?.id);
+
+    if (oldIndex === -1 || newIndex === -1) {
+      return;
+    }
+
+    const reorderedItems = arrayMove(draft.items, oldIndex, newIndex);
+    const optimisticDraft = {
+      ...draft,
+      items: reorderedItems.map((item, index) => ({
+        ...item,
+        position: index + 1
+      }))
+    };
+    setDraft(optimisticDraft);
+
+    try {
+      setDraft(await repository.reorderDraftItems(reorderedItems.map((item) => item.id)));
+      setStatus("已更新排序。");
+    } catch (error) {
+      setDraft(draft);
+      setStatus(error instanceof Error ? error.message : "拖拽排序失败，请稍后重试。");
+    }
   }
 
   async function publishDraft() {
@@ -155,33 +216,21 @@ export default function NewPlaylistPage() {
             <Link className="button primary" href="/playlists/new/add">添加视频</Link>
           </div>
         ) : (
-          <div className="item-list">
-            {draft.items.map((item, index) => (
-              <PlaylistItemRow
-                checked={selectedIds.has(item.id)}
-                item={item}
-                key={item.id}
-                onToggle={(id, checked) => {
-                  setSelectedIds((current) => {
-                    const next = new Set(current);
-                    if (checked) {
-                      next.add(id);
-                    } else {
-                      next.delete(id);
-                    }
-                    return next;
-                  });
-                }}
-                selectable
-                actions={(
-                  <>
-                    <button className="icon-button" disabled={index === 0 || busy} onClick={() => void moveItem(item.id, "up")}>↑</button>
-                    <button className="icon-button" disabled={index === draft.items.length - 1 || busy} onClick={() => void moveItem(item.id, "down")}>↓</button>
-                  </>
-                )}
-              />
-            ))}
-          </div>
+          <DndContext collisionDetection={closestCenter} onDragEnd={(event) => void handleDragEnd(event)} sensors={sensors}>
+            <SortableContext items={draft.items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+              <div className="item-list">
+                {draft.items.map((item) => (
+                  <SortableDraftItem
+                    busy={busy}
+                    checked={selectedIds.has(item.id)}
+                    item={item}
+                    key={item.id}
+                    setSelectedIds={setSelectedIds}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
       </section>
 
@@ -197,5 +246,60 @@ export default function NewPlaylistPage() {
 
       <BottomNav />
     </main>
+  );
+}
+
+function SortableDraftItem(props: {
+  busy: boolean;
+  checked: boolean;
+  item: DraftPlaylistItem;
+  setSelectedIds: Dispatch<SetStateAction<Set<string>>>;
+}) {
+  const {
+    attributes,
+    isDragging,
+    listeners,
+    setNodeRef,
+    transform,
+    transition
+  } = useSortable({ id: props.item.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition
+  };
+
+  return (
+    <div className={isDragging ? "sortable-item dragging" : "sortable-item"} ref={setNodeRef} style={style}>
+      <PlaylistItemRow
+        checked={props.checked}
+        item={props.item}
+        onToggle={(id, checked) => {
+          props.setSelectedIds((current) => {
+            const next = new Set(current);
+            if (checked) {
+              next.add(id);
+            } else {
+              next.delete(id);
+            }
+            return next;
+          });
+        }}
+        selectable
+        actions={(
+          <>
+            <button
+              aria-label={`拖拽排序 ${props.item.title}`}
+              className="drag-handle"
+              disabled={props.busy}
+              type="button"
+              {...attributes}
+              {...listeners}
+            >
+              ⋮⋮
+            </button>
+          </>
+        )}
+      />
+    </div>
   );
 }

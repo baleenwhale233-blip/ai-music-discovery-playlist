@@ -232,6 +232,21 @@ export function createLocalPlaylistRepository(
       });
     },
 
+    async reorderDraftItems(ids) {
+      const draft = readActiveDraft();
+      const itemById = new Map(draft.items.map((item) => [item.id, item]));
+      const reorderedItems = ids
+        .map((id) => itemById.get(id))
+        .filter((item): item is DraftPlaylistItem => Boolean(item));
+      const reorderedIdSet = new Set(reorderedItems.map((item) => item.id));
+      const remainingItems = draft.items.filter((item) => !reorderedIdSet.has(item.id));
+
+      return writeActiveDraft({
+        ...draft,
+        items: compactDraftPositions([...reorderedItems, ...remainingItems])
+      });
+    },
+
     async publishDraft() {
       const draft = readActiveDraft();
 

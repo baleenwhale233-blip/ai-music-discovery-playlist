@@ -2082,3 +2082,55 @@ Mobile Web First
 ### 下一个最合理的动作
 
 - 下一轮补 `packages/api-contract` 里的正式草稿 / 发布 / 广场契约，再在 `apps/api` 增加对应 controller/service，最后把 Web repository 从 localStorage 切到 HTTP 实现。
+
+---
+
+## 2026-05-01 22:30 CST
+
+### 本轮目标
+
+把添加听单草稿页的排序从“上移 / 下移”升级为拖拽排序，并在用户确认拖拽可用后删除箭头 fallback。
+
+### 本轮完成
+
+- 为 `apps/web` 新增拖拽排序依赖：
+  - `@dnd-kit/core`
+  - `@dnd-kit/sortable`
+  - `@dnd-kit/utilities`
+- 在 Web playlist repository 中新增 `reorderDraftItems(ids)`，用于把拖拽后的条目 ID 顺序写回草稿 position。
+- 新增 repository 测试，覆盖拖拽后的 ID 序列重排。
+- 在 `/playlists/new` 接入 `DndContext`、`SortableContext` 和拖拽手柄。
+- 删除草稿条目右侧的上移 / 下移按钮，只保留拖拽手柄。
+- 删除不再使用的 `.icon-button` 样式。
+
+### 影响目录
+
+- `apps/web/app/playlists/new/page.tsx`
+- `apps/web/app/globals.css`
+- `apps/web/lib`
+- `apps/web/package.json`
+- `pnpm-lock.yaml`
+- `docs/development_log.md`
+
+### 本轮已执行验证
+
+- `pnpm --filter @ai-music-playlist/web test`
+- `pnpm --filter @ai-music-playlist/web lint`
+- `pnpm --filter @ai-music-playlist/web typecheck`
+- `pnpm --filter @ai-music-playlist/web build`
+
+### 当前验证结果
+
+- Web 单元测试通过：2 个测试文件，8 个测试通过。
+- Web lint 通过。
+- Web typecheck 通过。
+- Web build 通过。
+
+### 当前剩余问题
+
+- 本轮没有继续做浏览器功能测试；拖拽交互由用户在 VS Code/浏览器测试环境中手动确认。
+- repository 中仍保留 `moveDraftItem` 能力，后续如果确认不再需要任何非拖拽排序入口，可以再做一次接口瘦身。
+
+### 下一个最合理的动作
+
+- 若拖拽体验稳定，下一步进入真实后端草稿 / 发布 / 广场契约与 API 实现。

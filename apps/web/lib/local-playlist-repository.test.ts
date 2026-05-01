@@ -118,6 +118,21 @@ describe("local playlist repository", () => {
     expect(movedDown.items.map((item) => item.title)).toEqual(["霓虹合成器", "午夜人声模型"]);
   });
 
+  it("reorders draft items from a dragged item id sequence", async () => {
+    const repository = createLocalPlaylistRepository({ storage: new MemoryStorage() });
+    await repository.appendImportPreviewToDraft(preview);
+    const draft = await repository.getActiveDraft();
+    const firstItem = draft.items[0];
+    const secondItem = draft.items[1];
+    expect(firstItem).toBeDefined();
+    expect(secondItem).toBeDefined();
+
+    const reordered = await repository.reorderDraftItems([secondItem?.id ?? "missing", firstItem?.id ?? "missing"]);
+
+    expect(reordered.items.map((item) => item.title)).toEqual(["午夜人声模型", "霓虹合成器"]);
+    expect(reordered.items.map((item) => item.position)).toEqual([1, 2]);
+  });
+
   it("publishes a draft as directory metadata and resets the active draft", async () => {
     const repository = createLocalPlaylistRepository({ storage: new MemoryStorage() });
     const draft = await repository.appendImportPreviewToDraft(preview);

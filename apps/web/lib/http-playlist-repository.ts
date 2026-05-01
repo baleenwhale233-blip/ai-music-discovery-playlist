@@ -11,6 +11,7 @@ export function createHttpPlaylistRepository(): PlaylistRepository {
     appendImportPreviewToDraft: notEnabled,
     removeDraftItems: notEnabled,
     moveDraftItem: notEnabled,
+    reorderDraftItems: notEnabled,
     publishDraft: notEnabled,
     listPublishedPlaylists: notEnabled,
     getPublishedPlaylist: notEnabled,
