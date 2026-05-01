@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { DraftPlaylistItem, PublishedPlaylistItem } from "../../lib/playlist-domain";
+import { buildMediaUrl } from "../../lib/api";
 
 type Item = DraftPlaylistItem | PublishedPlaylistItem;
 
@@ -11,6 +12,8 @@ export function PlaylistItemRow(props: {
   onToggle?: (id: string, checked: boolean) => void;
   actions?: ReactNode;
 }) {
+  const coverUrl = buildMediaUrl(props.item.coverUrl);
+
   return (
     <article className="item-row">
       {props.selectable ? (
@@ -22,7 +25,7 @@ export function PlaylistItemRow(props: {
           type="checkbox"
         />
       ) : null}
-      {props.item.coverUrl ? <img className="item-cover" src={props.item.coverUrl} alt="" /> : <div className="item-cover" />}
+      {coverUrl ? <img className="item-cover" src={coverUrl} alt="" /> : <div className="item-cover" />}
       <div className="item-content">
         <strong>{props.item.title}</strong>
         <span>

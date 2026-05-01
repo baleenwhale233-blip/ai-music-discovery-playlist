@@ -8,7 +8,7 @@ import { BottomNav } from "../../components/bottom-nav";
 import { LoginPrompt } from "../../components/login-prompt";
 import { PageHeader } from "../../components/page-header";
 import { PlaylistItemRow } from "../../components/playlist-item-row";
-import { getStoredToken } from "../../../lib/api";
+import { buildMediaUrl, getStoredToken } from "../../../lib/api";
 import type { PublishedPlaylistDetail } from "../../../lib/playlist-domain";
 import { createPlaylistRepository } from "../../../lib/playlist-repository-factory";
 
@@ -79,6 +79,7 @@ export default function PlaylistDetailPage() {
   const cacheableIds = playlist.items
     .filter((item) => item.collectionId && item.importItemId && item.cacheStatus !== "cached")
     .map((item) => item.id);
+  const coverUrl = buildMediaUrl(playlist.coverUrl);
 
   return (
     <main className="mobile-shell with-bottom-nav">
@@ -92,7 +93,7 @@ export default function PlaylistDetailPage() {
 
       <section className="surface playlist-detail-hero">
         <div className="cover-stack large">
-          {playlist.coverUrl ? <img src={playlist.coverUrl} alt="" /> : <div className="cover-fallback">{playlist.title.slice(0, 1)}</div>}
+          {coverUrl ? <img src={coverUrl} alt="" /> : <div className="cover-fallback">{playlist.title.slice(0, 1)}</div>}
         </div>
         <div>
           <p className="eyebrow">Bilibili</p>

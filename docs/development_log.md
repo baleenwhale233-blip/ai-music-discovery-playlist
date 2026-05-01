@@ -2134,3 +2134,112 @@ Mobile Web First
 ### 下一个最合理的动作
 
 - 若拖拽体验稳定，下一步进入真实后端草稿 / 发布 / 广场契约与 API 实现。
+
+---
+
+## 2026-05-01 22:55 CST
+
+### 本轮目标
+
+彻底修复 Web 正式链路中 B 站封面图偶发无法显示的问题，避免前端直接加载 B 站图床地址导致防盗链失败。
+
+### 本轮完成
+
+- 将 B 站封面 URL 规范化收紧到 `hdslb.com` / `biliimg.com` 图片域名，避免正式接口成为任意 URL 代理。
+- 新增正式封面代理路径：
+  - `GET /api/v1/contents/cover?url=...`
+  - 使用 Alpha 登录守卫，支持 Web 端通过 `access_token` 查询参数加载图片。
+  - 后端拉取封面时继续使用 B 站 referer 与桌面 user-agent。
+- 导入预览返回值不再把 B 站图床 URL 直接交给 Web，而是返回 `/api/v1/contents/cover?url=...`。
+- 本地听单中未缓存条目的 B 站封面也统一映射到正式封面代理；已缓存条目继续使用 `/api/v1/local-audio/:cacheKey/cover`。
+- Web `buildMediaUrl()` 增加 B 站图床兜底代理转换，兼容已经存在 localStorage 里的旧草稿 / 已发布听单封面 URL。
+- Web 听单卡片、条目行、详情页大封面统一使用 `buildMediaUrl()` 构建封面地址。
+
+### 影响目录
+
+- `apps/api/src/modules/contents`
+- `apps/web/app/components`
+- `apps/web/app/playlists/[playlistId]`
+- `apps/web/lib`
+- `docs/development_log.md`
+
+### 本轮已执行验证
+
+- `pnpm --filter @ai-music-playlist/api test -- src/modules/contents/bilibili-cover.test.ts src/modules/contents/local-audio-playlist.test.ts`
+- `pnpm --filter @ai-music-playlist/api test -- src/modules/contents/bilibili-import-preview.test.ts`
+- `pnpm --filter @ai-music-playlist/web test -- api.test.ts`
+- `pnpm --filter @ai-music-playlist/web test`
+- `pnpm --filter @ai-music-playlist/api typecheck`
+- `pnpm --filter @ai-music-playlist/web typecheck`
+- `pnpm --filter @ai-music-playlist/api lint`
+- `pnpm --filter @ai-music-playlist/web lint`
+- `git diff --check`
+
+### 当前验证结果
+
+- API 定向测试通过：2 个测试文件，9 个测试通过。
+- API 导入预览回归测试通过：1 个测试文件，2 个测试通过。
+- Web 测试通过：2 个测试文件，9 个测试通过。
+- API typecheck 通过。
+- Web typecheck 通过。
+- API lint 通过。
+- Web lint 通过。
+- `git diff --check` 通过。
+
+### 当前剩余问题
+
+- 本轮没有跑真实 B 站网络 smoke；修复基于现有后端 `fetchCoverImage()` 代理能力和定向单元测试。
+- 历史 localStorage 中非 B 站域名的外部图片仍按原逻辑直连显示；只有 B 站图片域名会自动代理。
+
+### 下一个最合理的动作
+
+- 真实功能测试时重点验证：新导入草稿封面、已发布听单广场封面、听单详情大封面、历史草稿中的旧 B 站封面 URL 是否都能正常显示。
+
+---
+
+## 2026-05-01 23:35 CST
+
+### 本轮目标
+
+修复 `/login` 页面回到浏览器默认样式的问题，并把登录页补齐到当前 Mobile Web IA 的视觉结构。
+
+### 本轮完成
+
+- 将 `/login` 从旧的 `app-shell + panel` 结构迁移到当前统一的 `mobile-shell + surface` 移动端产品壳。
+- 新增 `auth-card`、`auth-copy`、`auth-form` 样式，保证登录页标题、说明、表单、操作区和状态提示稳定使用当前全局设计语言。
+- 保留原有 Alpha 登录逻辑、邀请码 / 验证码输入和登录成功后跳转 `/` 的行为。
+- 通过 `curl http://127.0.0.1:3020/login` 确认 HTML 已包含全局 stylesheet 链接和新的登录页 class。
+- 同时发现当前运行中的 dev server 对 `/_next/static/css/app/layout.css?...` 返回 404，说明本地开发服务 / `.next` 静态资源状态可能已脏；功能测试前建议重启 `pnpm dev:web`，必要时清理 `apps/web/.next`。
+
+### 影响目录
+
+- `apps/web/app/login/page.tsx`
+- `apps/web/app/globals.css`
+- `docs/development_log.md`
+
+### 本轮已执行验证
+
+- `pnpm --filter @ai-music-playlist/web lint`
+- `pnpm --filter @ai-music-playlist/web typecheck`
+- `pnpm --filter @ai-music-playlist/web test`
+- `pnpm --filter @ai-music-playlist/web build`
+- `curl -sS http://127.0.0.1:3020/login`
+- `git diff --check`
+
+### 当前验证结果
+
+- Web lint 通过。
+- Web typecheck 通过。
+- Web 测试通过：2 个测试文件，9 个测试通过。
+- Web build 通过。
+- `curl /login` 返回了新的登录页结构和 stylesheet 链接。
+- `git diff --check` 通过。
+
+### 当前剩余问题
+
+- 本轮按用户要求不做浏览器 smoke。
+- 当前已运行的 3020 dev server 的 CSS 静态资源请求返回 404，可能需要重启 dev server 或清理 `.next` 后再做人工验收。
+
+### 下一个最合理的动作
+
+- 用户重启 `pnpm dev:web` 后人工确认 `/login` 是否恢复当前移动端登录 UI；若仍然裸样式，再优先检查 dev server 的 `/_next/static/css/app/layout.css` 请求状态。

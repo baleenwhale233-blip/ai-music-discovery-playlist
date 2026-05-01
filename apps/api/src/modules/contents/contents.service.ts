@@ -30,7 +30,7 @@ import { fetchBilibiliImportPreview } from "./bilibili-import-preview";
 import { buildExperimentalPlaylistResponse } from "./experimental-playlist";
 import { buildLocalAudioPlaylistResponse } from "./local-audio-playlist";
 
-import { normalizeBilibiliCoverUrl } from "./bilibili-cover";
+import { buildBilibiliCoverProxyPath, normalizeBilibiliCoverUrl } from "./bilibili-cover";
 import { buildBilibiliFavoritePreviewResponse } from "./experimental-collection";
 import {
   isResolvableBilibiliShortLink,
@@ -205,7 +205,7 @@ export class ContentsService {
         bvid: item.bvid,
         title: item.title,
         url: item.url,
-        coverUrl: item.coverUrl,
+        coverUrl: buildBilibiliCoverProxyPath(item.coverUrl),
         ownerName: item.ownerName,
         durationSeconds: item.durationSeconds,
         isExcluded: collectionItem.isExcluded,

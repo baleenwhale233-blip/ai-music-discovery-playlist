@@ -56,10 +56,20 @@ export function buildMediaUrl(path: string | null) {
     return null;
   }
 
+  const bilibiliCoverProxyPath = buildBilibiliCoverProxyPath(path);
+
+  if (bilibiliCoverProxyPath) {
+    return buildAuthenticatedApiUrl(bilibiliCoverProxyPath);
+  }
+
   if (/^https?:\/\//i.test(path)) {
     return path;
   }
 
+  return buildAuthenticatedApiUrl(path);
+}
+
+function buildAuthenticatedApiUrl(path: string) {
   const token = getStoredToken();
   const url = new URL(buildApiUrl(path));
 
@@ -69,6 +79,32 @@ export function buildMediaUrl(path: string | null) {
   }
 
   return url.toString();
+}
+
+function buildBilibiliCoverProxyPath(path: string) {
+  if (!/^https?:\/\//i.test(path) && !path.startsWith("//")) {
+    return null;
+  }
+
+  const source = path.trim().replace(/^\/\//, "https://").replace(/^http:\/\//i, "https://");
+
+  try {
+    const url = new URL(source);
+    const hostname = url.hostname.toLowerCase();
+    const isBilibiliImageHost =
+      hostname === "hdslb.com" ||
+      hostname.endsWith(".hdslb.com") ||
+      hostname === "biliimg.com" ||
+      hostname.endsWith(".biliimg.com");
+
+    if (url.protocol !== "https:" || !isBilibiliImageHost) {
+      return null;
+    }
+
+    return `/api/v1/contents/cover?url=${encodeURIComponent(url.toString())}`;
+  } catch {
+    return null;
+  }
 }
 
 export function login(input: { phoneOrEmail: string; code: string; inviteCode: string }) {

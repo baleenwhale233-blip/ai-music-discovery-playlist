@@ -1,5 +1,7 @@
 import type { LocalAudioPlaylistResponse } from "@ai-music-playlist/api-contract";
 
+import { buildBilibiliCoverProxyPath } from "./bilibili-cover";
+
 type PlaylistModel = {
   id: string;
   name: string;
@@ -54,6 +56,16 @@ function normalizeStatus(status: string | null | undefined): LocalAudioStatus {
   }
 }
 
+function buildPlaylistCoverUrl(item: PlaylistItemModel, cacheKey: string | null, status: LocalAudioStatus) {
+  if (cacheKey && status === "ready") {
+    return `/api/v1/local-audio/${encodeURIComponent(cacheKey)}/cover`;
+  }
+
+  const sourceCoverUrl = item.coverUrlSnapshot ?? item.sourceContent.coverUrl;
+
+  return buildBilibiliCoverProxyPath(sourceCoverUrl) ?? sourceCoverUrl;
+}
+
 export function buildLocalAudioPlaylistResponse(input: {
   playlist: PlaylistModel;
   items: PlaylistItemModel[];
@@ -71,9 +83,7 @@ export function buildLocalAudioPlaylistResponse(input: {
         localAudioAssetId: item.localAudioAssetId,
         position: item.position,
         title: item.titleSnapshot ?? item.sourceContent.title,
-        coverUrl: cacheKey && status === "ready"
-          ? `/api/v1/local-audio/${encodeURIComponent(cacheKey)}/cover`
-          : item.coverUrlSnapshot ?? item.sourceContent.coverUrl,
+        coverUrl: buildPlaylistCoverUrl(item, cacheKey, status),
         durationSeconds: item.durationSecSnapshot ?? item.sourceContent.durationSec,
         audioUrl: cacheKey && status === "ready"
           ? `/api/v1/local-audio/${encodeURIComponent(cacheKey)}/audio`

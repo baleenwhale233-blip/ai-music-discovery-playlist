@@ -207,6 +207,26 @@ label {
   width: min(430px, 100%);
 }
 
+.auth-card {
+  align-content: start;
+  gap: 18px;
+}
+
+.auth-copy {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-form {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-card .actions {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
 .module-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

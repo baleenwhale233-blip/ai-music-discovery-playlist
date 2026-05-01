@@ -38,6 +38,7 @@ export class ContentsController {
     this.previewBilibiliFavorite = this.previewBilibiliFavorite.bind(this);
     this.excludeSourceCollectionItem = this.excludeSourceCollectionItem.bind(this);
     this.getBilibiliCover = this.getBilibiliCover.bind(this);
+    this.getFormalBilibiliCover = this.getFormalBilibiliCover.bind(this);
     this.cacheLocalAudio = this.cacheLocalAudio.bind(this);
     this.getExperimentalPlaylist = this.getExperimentalPlaylist.bind(this);
     this.getLocalAudio = this.getLocalAudio.bind(this);
@@ -82,6 +83,20 @@ export class ContentsController {
 
     response.setHeader("content-type", cover.contentType);
     response.setHeader("cache-control", "public, max-age=3600");
+
+    return new StreamableFile(cover.buffer);
+  }
+
+  @Get("cover")
+  @UseGuards(AlphaAuthGuard)
+  async getFormalBilibiliCover(
+    @Query("url") url: string,
+    @Res({ passthrough: true }) response: { setHeader: (name: string, value: string) => void },
+  ) {
+    const cover = await this.contentsService.fetchCoverImage(url);
+
+    response.setHeader("content-type", cover.contentType);
+    response.setHeader("cache-control", "private, max-age=3600");
 
     return new StreamableFile(cover.buffer);
   }

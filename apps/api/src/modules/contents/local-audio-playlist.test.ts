@@ -42,4 +42,36 @@ describe("buildLocalAudioPlaylistResponse", () => {
       status: "ready"
     });
   });
+
+  it("maps uncached bilibili covers to the formal cover proxy", () => {
+    const response = buildLocalAudioPlaylistResponse({
+      playlist: {
+        id: "playlist-1",
+        name: "我的本地听单",
+        kind: "MUSIC",
+        sourceType: "MANUAL"
+      },
+      items: [
+        {
+          id: "item-1",
+          sourceContentId: "content-1",
+          localAudioAssetId: null,
+          position: 1,
+          titleSnapshot: "Song 1",
+          coverUrlSnapshot: "http://i0.hdslb.com/bfs/archive/cover.jpg",
+          durationSecSnapshot: 120,
+          sourceContent: {
+            title: "Fallback title",
+            coverUrl: null,
+            durationSec: null
+          },
+          localAudioAsset: null
+        }
+      ]
+    });
+
+    expect(response.items[0]?.coverUrl).toBe(
+      "/api/v1/contents/cover?url=https%3A%2F%2Fi0.hdslb.com%2Fbfs%2Farchive%2Fcover.jpg",
+    );
+  });
 });
