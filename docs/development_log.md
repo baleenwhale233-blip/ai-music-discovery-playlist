@@ -2243,3 +2243,160 @@ Mobile Web First
 ### 下一个最合理的动作
 
 - 用户重启 `pnpm dev:web` 后人工确认 `/login` 是否恢复当前移动端登录 UI；若仍然裸样式，再优先检查 dev server 的 `/_next/static/css/app/layout.css` 请求状态。
+
+---
+
+## 2026-05-15 21:35 CST
+
+### 本轮目标
+
+按设计截图还原正式 Web 的添加听单流程，并补齐从链接解析、解析结果选择、草稿管理与发布前底部 CTA 的移动端产品化体验。
+
+### 本轮完成
+
+- 重做 `/playlists/new`：
+  - 使用设计图里的创建听单壳：顶部关闭 / 标题 / 确认，底部固定胶囊操作区。
+  - 支持空草稿状态：标题、简介、从链接添加、导入已有内容占位、待保存条目空状态。
+  - 支持已有条目状态：管理条目、排序提示、批量管理、继续添加、发布听单。
+  - 保留现有 localStorage 草稿、拖拽排序、批量删除、发布到本地广场的行为。
+- 重做 `/playlists/new/add`：
+  - 从“添加视频”调整为“从链接添加”。
+  - 只展示 B 站和 YouTube 来源 chip；B 站为当前可用来源，YouTube 作为实验预留。
+  - 解析后停留在解析结果视图，支持全选 / 取消单条 / 添加选中条目到草稿。
+- 新增 `visibleSourceOptions` 与测试，锁定添加链接页只露出 B 站和 YouTube。
+- 调整 `PlaylistItemRow` 的 selectable class，避免非批量模式下条目布局错列。
+- 收紧全局 CSS 字号：所有显式 `font-size` 均控制在 12px 到 20px 之间，并移除旧的 viewport clamp 大标题。
+
+### 影响目录
+
+- `apps/web/app/playlists/new`
+- `apps/web/app/playlists/new/add`
+- `apps/web/app/components/playlist-item-row.tsx`
+- `apps/web/app/globals.css`
+- `apps/web/lib/source-options.ts`
+- `apps/web/lib/source-options.test.ts`
+- `docs/development_log.md`
+
+### 本轮已执行验证
+
+- `pnpm --filter @ai-music-playlist/web test -- source-options.test.ts`
+- `pnpm --filter @ai-music-playlist/web test`
+- `pnpm --filter @ai-music-playlist/web lint`
+- `pnpm --filter @ai-music-playlist/web typecheck`
+- `pnpm --filter @ai-music-playlist/web build`
+- `git diff --check`
+
+### 当前验证结果
+
+- Web 定向测试通过：1 个测试文件，2 个测试通过。
+- Web 全量测试通过：3 个测试文件，11 个测试通过。
+- Web lint 通过。
+- Web typecheck 通过。
+- Web build 通过。
+- `git diff --check` 通过。
+
+### 当前剩余问题
+
+- 本轮按用户要求不调用本地 Playwright；移动端视觉由用户后续人工 check。
+- YouTube 只作为 UI 预留展示，当前正式解析仍以已有 B 站导入接口为主。
+- “导入已有内容”是禁用占位，尚未接资料库或文件选择。
+- 草稿、发布听单、广场列表仍沿用 localStorage 原型数据，未接正式后端草稿接口。
+
+### 下一个最合理的动作
+
+- 用户人工检查 `/playlists/new` 和 `/playlists/new/add` 的移动端视觉比例后，下一轮再根据截图反馈微调间距、封面占比、底部 CTA 高度。
+
+---
+
+## 2026-05-15 21:57 CST
+
+### 本轮目标
+
+修复添加听单解析链接时旧 Alpha token 导致的 `Invalid bearer token` 卡住问题。
+
+### 本轮完成
+
+- 在 Web API 请求层识别服务端返回的 401 `Invalid bearer token` / `Missing bearer token`。
+- 遇到失效 Alpha token 时自动清理 `localStorage` 中的旧 token，并统一提示“登录已失效，请重新登录。”。
+- `/playlists/new/add` 在解析或加入草稿时如果 token 已被清理，会切回登录提示，不再继续停留在带旧 token 的创建流程里。
+- 新增 Web API 回归测试，覆盖失效 token 被清理的行为。
+
+### 影响目录
+
+- `apps/web/lib/api.ts`
+- `apps/web/lib/api.test.ts`
+- `apps/web/app/playlists/new/add/page.tsx`
+- `docs/development_log.md`
+
+### 本轮已执行验证
+
+- `pnpm --filter @ai-music-playlist/web test -- api.test.ts`
+- `pnpm --filter @ai-music-playlist/web test`
+- `pnpm --filter @ai-music-playlist/web lint`
+- `pnpm --filter @ai-music-playlist/web typecheck`
+- `pnpm --filter @ai-music-playlist/web build`
+
+### 当前验证结果
+
+- Web 定向测试通过：1 个测试文件，3 个测试通过。
+- Web 全量测试通过：3 个测试文件，12 个测试通过。
+- Web lint 通过。
+- Web typecheck 通过。
+- Web build 通过。
+
+### 当前剩余问题
+
+- 用户浏览器里已经失效的 token 需要触发一次受保护接口或手动重新登录后才会被替换。
+- 本轮不改 API token 签发策略，也不做 refresh token 自动续期。
+
+### 下一个最合理的动作
+
+- 用户重新登录 Alpha 后，再解析 `https://www.bilibili.com/list/ml3960775205?...`，确认不再出现旧 token 报错；若继续失败，再看 B 站列表解析本身的返回错误。
+
+---
+
+## 2026-05-15 22:43 CST
+
+### 本轮目标
+
+按用户人工视觉检查反馈，删掉添加听单流程里的低价值占位模块。
+
+### 本轮完成
+
+- `/playlists/new` 的“添加内容”模块只保留“从链接添加”。
+- 删除“导入已有内容”禁用占位入口，并把空状态提示收紧为“先添加链接”。
+- `/playlists/new/add` 删除“链接预览”模块，让页面从链接输入、来源 chip 直接进入“解析后将发生什么”和底部开始解析。
+- 清理对应未使用图标函数与 CSS class。
+
+### 影响目录
+
+- `apps/web/app/playlists/new/page.tsx`
+- `apps/web/app/playlists/new/add/page.tsx`
+- `apps/web/app/globals.css`
+- `docs/development_log.md`
+
+### 本轮已执行验证
+
+- `rg "导入已有内容|链接预览|link-preview-card|option-icon-file|FileIcon" apps/web/app apps/web/lib`
+- `pnpm --filter @ai-music-playlist/web test`
+- `pnpm --filter @ai-music-playlist/web lint`
+- `pnpm --filter @ai-music-playlist/web typecheck`
+- `pnpm --filter @ai-music-playlist/web build`
+- `git diff --check`
+
+### 当前验证结果
+
+- 搜索无匹配，确认相关模块与未用样式/图标已删除。
+- Web 全量测试通过：3 个测试文件，12 个测试通过。
+- Web lint 通过。
+- Web typecheck 通过。
+- Web build 通过。
+- `git diff --check` 通过。
+
+### 当前剩余问题
+
+- 本轮仍按用户要求不调用本地 Playwright；视觉由用户继续人工 check。
+
+### 下一个最合理的动作
+
+- 继续根据用户对移动端截图的人工反馈微调创建听单与从链接添加页的比例、间距和内容密度。

@@ -45,10 +45,25 @@ async function requestJson<T>(path: string, options: RequestInit = {}): Promise<
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    if (isInvalidAlphaAuthResponse(response.status, payload)) {
+      clearToken();
+      throw new Error("登录已失效，请重新登录。");
+    }
+
     throw new Error(payload.message ?? "请求失败");
   }
 
   return payload as T;
+}
+
+function isInvalidAlphaAuthResponse(status: number, payload: unknown) {
+  if (status !== 401 || !payload || typeof payload !== "object" || !("message" in payload)) {
+    return false;
+  }
+
+  const message = (payload as { message?: unknown }).message;
+
+  return message === "Invalid bearer token" || message === "Missing bearer token";
 }
 
 export function buildMediaUrl(path: string | null) {

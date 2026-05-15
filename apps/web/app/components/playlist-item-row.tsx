@@ -15,7 +15,7 @@ export function PlaylistItemRow(props: {
   const coverUrl = buildMediaUrl(props.item.coverUrl);
 
   return (
-    <article className="item-row">
+    <article className={props.selectable ? "item-row selectable" : "item-row"}>
       {props.selectable ? (
         <input
           aria-label="选择条目"
