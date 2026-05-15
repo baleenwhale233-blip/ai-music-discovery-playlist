@@ -80,11 +80,12 @@ export default function PlaylistDetailPage() {
     .filter((item) => item.collectionId && item.importItemId && item.cacheStatus !== "cached")
     .map((item) => item.id);
   const coverUrl = buildMediaUrl(playlist.coverUrl);
+  const playerHref = `/player/${encodeURIComponent(playlist.id)}`;
 
   return (
     <main className="mobile-shell with-bottom-nav">
       <PageHeader
-        actionHref="/playlist"
+        actionHref={playerHref}
         actionLabel="打开播放器"
         description={playlist.description || "这是一张目录听单。缓存后才会进入你的真实播放器。"}
         eyebrow={playlist.isSample ? "Sample Directory" : "Published Directory"}
@@ -119,7 +120,7 @@ export default function PlaylistDetailPage() {
           <button className="secondary" disabled={selectedIds.size === 0 || busy} onClick={() => setSelectedIds(new Set())}>
             取消
           </button>
-          <Link className="button secondary" href="/playlist">查看本地播放器</Link>
+          <Link className="button secondary" href={playerHref}>查看本地播放器</Link>
         </div>
         <div className="status">{status}</div>
         <div className="item-list">

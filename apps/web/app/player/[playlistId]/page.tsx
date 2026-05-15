@@ -1,23 +1,26 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { LocalAudioPlaylistItem, LocalAudioPlaylistResponse } from "@ai-music-playlist/api-contract";
 
-import { BottomNav } from "../components/bottom-nav";
+import { BottomNav } from "../../components/bottom-nav";
 import {
   buildMediaUrl,
   clearLocalAudioPlaylist,
   deletePlaylistItem,
   getLocalAudioPlaylist,
   getStoredToken
-} from "../../lib/api";
+} from "../../../lib/api";
 
-export default function PlaylistPage() {
+export default function PlayerPage() {
+  const params = useParams<{ playlistId: string }>();
   const [playlist, setPlaylist] = useState<LocalAudioPlaylistResponse | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [status, setStatus] = useState("正在读取你的本地听单。");
   const [busy, setBusy] = useState(false);
+  const playlistId = decodeURIComponent(params.playlistId);
 
   async function refresh() {
     if (!getStoredToken()) {
@@ -28,7 +31,7 @@ export default function PlaylistPage() {
     const result = await getLocalAudioPlaylist();
     setPlaylist(result);
     setCurrentIndex((index) => Math.min(index, Math.max(result.items.length - 1, 0)));
-    setStatus(result.items.length ? "听单已就绪。" : "听单为空，先去导入页缓存几首。");
+    setStatus(result.items.length ? "听单已就绪。" : "听单为空，先去听单详情缓存几首。");
   }
 
   useEffect(() => {
@@ -65,6 +68,7 @@ export default function PlaylistPage() {
 
   const items = playlist?.items ?? [];
   const current = items[currentIndex] ?? null;
+  const detailHref = playlistId === "local-audio" ? "/playlists" : `/playlists/${encodeURIComponent(playlistId)}`;
 
   return (
     <main className="app-shell with-bottom-nav">
@@ -74,15 +78,15 @@ export default function PlaylistPage() {
           <strong>本地听单</strong>
         </Link>
         <div className="nav">
-          <Link className="secondary" href="/playlists/new">添加</Link>
-          <Link href="/playlist">听单</Link>
+          <Link className="secondary" href={detailHref}>详情</Link>
+          <Link href={`/player/${encodeURIComponent(playlistId)}`}>播放器</Link>
         </div>
       </nav>
 
       <section className="hero">
         <p className="eyebrow">Real Audio Player</p>
-        <h1>这里不再假装 iframe 是播放器。</h1>
-        <p className="lead">只有缓存完成的本地音频才会出现在播放器里。播放、暂停、拖动进度和连播都交给真实 media element。</p>
+        <h1>本地缓存播放器</h1>
+        <p className="lead">缓存完成的音频会出现在播放器里。播放、暂停、拖动进度和连播都交给真实 media element。</p>
       </section>
 
       <div className="grid">
@@ -108,7 +112,7 @@ export default function PlaylistPage() {
               />
             </div>
           ) : (
-            <p className="lead">听单还是空的。先从导入页缓存一两首，别一上来就把几百首合集全塞进锅里。</p>
+            <p className="lead">听单还是空的。先从听单详情里缓存一两首，再回到这里连续收听。</p>
           )}
           <div className="actions">
             <button className="secondary" disabled={busy} onClick={() => void refresh()}>刷新</button>

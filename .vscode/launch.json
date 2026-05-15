@@ -36,12 +36,6 @@
       "stopAll": true,
       "preLaunchTask": "alpha:preflight-before-dev",
       "configurations": ["API Dev", "Web Dev"]
-    },
-    {
-      "name": "Local Audio Experiment (Dev)",
-      "stopAll": true,
-      "preLaunchTask": "stop-local-audio-experiment",
-      "configurations": ["API Dev", "Admin Dev"]
     }
   ]
 }

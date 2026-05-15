@@ -17,7 +17,7 @@ type CacheItems = (input: { collectionId: string; itemIds: string[] }) => Promis
 const ACTIVE_DRAFT_KEY = "ai_music_active_playlist_draft";
 const PUBLISHED_PLAYLISTS_KEY = "ai_music_published_playlists";
 
-const sampleCreatedAt = "2026-04-30T00:00:00.000Z";
+const sampleCreatedAt = "1970-01-01T00:00:00.000Z";
 
 const samplePlaylists: PublishedPlaylistDetail[] = [
   {

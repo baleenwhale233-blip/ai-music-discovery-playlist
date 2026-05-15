@@ -12,7 +12,7 @@ const items = [
   {
     href: "/me",
     label: "我的",
-    match: (pathname: string) => pathname.startsWith("/me") || pathname === "/playlist"
+    match: (pathname: string) => pathname.startsWith("/me") || pathname.startsWith("/player")
   }
 ];
 

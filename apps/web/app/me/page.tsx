@@ -83,7 +83,7 @@ export default function MePage() {
             <h2>最近本地缓存</h2>
             <p>缓存文件只属于当前账号和当前后端环境。</p>
           </div>
-          <Link className="button secondary" href="/playlist">播放器</Link>
+          <Link className="button secondary" href="/player/local-audio">播放器</Link>
         </div>
         <div className="mini-cache-list">
           {(localPlaylist?.items ?? []).slice(0, 4).map((item) => (

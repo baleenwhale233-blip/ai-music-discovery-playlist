@@ -44,20 +44,6 @@
       "problemMatcher": []
     },
     {
-      "label": "stop-local-audio-experiment",
-      "type": "shell",
-      "command": "./stop-local-audio-experiment.command",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      },
-      "problemMatcher": []
-    },
-    {
       "label": "api:build",
       "type": "shell",
       "command": "pnpm --filter @ai-music-playlist/api build",
