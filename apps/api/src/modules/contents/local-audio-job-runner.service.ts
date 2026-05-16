@@ -1,4 +1,4 @@
-import { Injectable, Optional } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 
 import { appEnv } from "../../config/env";
 import { LocalAudioWorkerService } from "./local-audio-worker.service";
@@ -9,6 +9,7 @@ export class LocalAudioJobRunnerService {
   private active = 0;
 
   constructor(
+    @Inject(LocalAudioWorkerService)
     private readonly worker: LocalAudioWorkerService,
     @Optional() options?: { concurrency: number },
   ) {

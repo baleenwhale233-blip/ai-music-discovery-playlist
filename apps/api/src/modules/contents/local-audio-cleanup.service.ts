@@ -1,6 +1,7 @@
-import { Injectable, Optional } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 
 import { appEnv } from "../../config/env";
+import { PrismaService } from "../../platform/prisma/prisma.service";
 import { LocalAudioStagingStorageService } from "./local-audio-staging-storage.service";
 import { LocalAudioTempStorageService } from "./local-audio-temp-storage.service";
 
@@ -20,8 +21,11 @@ type PrismaCleanupClient = {
 @Injectable()
 export class LocalAudioCleanupService {
   constructor(
+    @Inject(PrismaService)
     private readonly prisma: PrismaCleanupClient,
+    @Inject(LocalAudioStagingStorageService)
     private readonly stagingStorage: LocalAudioStagingStorageService,
+    @Inject(LocalAudioTempStorageService)
     private readonly tempStorage: LocalAudioTempStorageService,
     @Optional() options?: { tempTtlHours: number },
   ) {

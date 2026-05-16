@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -6,7 +6,7 @@ import { LocalAudioPathService } from "./local-audio-path.service";
 
 @Injectable()
 export class LocalAudioTempStorageService {
-  constructor(private readonly paths: LocalAudioPathService) {}
+  constructor(@Inject(LocalAudioPathService) private readonly paths: LocalAudioPathService) {}
 
   async createTaskDir(taskId: string) {
     const taskDir = this.paths.getTaskTempDir(taskId);

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { createReadStream } from "node:fs";
 import { mkdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, extname } from "node:path";
@@ -7,7 +7,7 @@ import { LocalAudioPathService } from "./local-audio-path.service";
 
 @Injectable()
 export class LocalAudioStagingStorageService {
-  constructor(private readonly paths: LocalAudioPathService) {}
+  constructor(@Inject(LocalAudioPathService) private readonly paths: LocalAudioPathService) {}
 
   async stageArtifact(input: { assetId: string; sourcePath: string; extension?: string }) {
     const extension = input.extension ?? (extname(input.sourcePath) || ".m4a");

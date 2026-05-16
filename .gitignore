@@ -3,6 +3,7 @@ node_modules
 .cache
 .logs
 .run
+.local
 .local-audio-cache
 .local-audio-clean-room-cache
 .turbo

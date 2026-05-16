@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type {
   LocalAudioCacheRequestCreate,
   LocalAudioCacheRequestCreateResponse,
@@ -8,6 +8,7 @@ import type {
 } from "@ai-music-playlist/api-contract";
 
 import { appEnv } from "../../config/env";
+import { PrismaService } from "../../platform/prisma/prisma.service";
 import { toSafeCacheKey } from "./local-audio-cache";
 import { LocalAudioJobRunnerService } from "./local-audio-job-runner.service";
 import { LocalAudioStagingStorageService } from "./local-audio-staging-storage.service";
@@ -65,9 +66,12 @@ type PrismaLocalAudioClient = {
 @Injectable()
 export class LocalAudioService {
   constructor(
+    @Inject(PrismaService)
     private readonly prisma: PrismaLocalAudioClient,
+    @Inject(LocalAudioStagingStorageService)
     private readonly stagingStorage: LocalAudioStagingStorageService,
-    private readonly runner: Pick<LocalAudioJobRunnerService, "enqueue">,
+    @Inject(LocalAudioJobRunnerService)
+    private readonly runner: LocalAudioJobRunnerService,
     @Optional() options?: { workerEnabled: boolean },
   ) {
     this.options = options ?? { workerEnabled: appEnv.LOCAL_AUDIO_WORKER_ENABLED };

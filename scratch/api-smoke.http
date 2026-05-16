@@ -1,0 +1,46 @@
+@baseUrl = http://127.0.0.1:4000/api/v1
+@token = alpha.eyJ1c2VySWQiOiI5MzU5OWUzOS1mYmQ5LTRjZTctYmIyNC01Mjc0ZjE0NzA0MGMiLCJwaG9uZU9yRW1haWwiOiJhbHBoYUBleGFtcGxlLmNvbSIsImV4cCI6MTc3OTUzNzQ2MX0.RxyjxVlFUloMqzU9Rw2Dxma1KnApjSv1XBed9grvTgE
+
+### Health
+GET {{baseUrl}}/health
+
+### Protected endpoint without token, should be 401
+GET {{baseUrl}}/playlists/local-audio
+
+### Login
+POST {{baseUrl}}/auth/verify-code
+Content-Type: application/json
+
+{
+  "phoneOrEmail": "alpha@example.com",
+  "code": "246810",
+  "inviteCode": "alpha-50",
+  "scenario": "login"
+}
+
+### Protected local audio playlist
+GET {{baseUrl}}/playlists/local-audio
+Authorization: Bearer {{token}}
+
+### Import preview
+POST {{baseUrl}}/imports/preview
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "url": "https://www.bilibili.com/video/BV1B7411m7LV",
+  "limit": 1
+}
+
+### Create local audio cache task
+POST {{baseUrl}}/local-audio/cache-requests
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sourceContentId": "58cc0be9-46c2-46a7-96a3-ef2892f6c2d4"
+}
+
+### Get task status
+GET {{baseUrl}}/local-audio/tasks/paste-taskId-here
+Authorization: Bearer {{token}}

@@ -1,9 +1,10 @@
 import { BadRequestException, Inject, Injectable, Optional } from "@nestjs/common";
 import { spawn } from "node:child_process";
-import { stat } from "node:fs/promises";
-import { extname } from "node:path";
+import { readdir, stat } from "node:fs/promises";
+import { basename, dirname, extname, join } from "node:path";
 
 import { appEnv } from "../../config/env";
+import { PrismaService } from "../../platform/prisma/prisma.service";
 import { parseBilibiliLink } from "./bilibili-link.parser";
 import { BILIBILI_DESKTOP_USER_AGENT } from "./local-audio-cache";
 import { FileHashService } from "./local-audio-file-hash.service";
@@ -60,6 +61,7 @@ type PrismaWorkerClient = {
 export class YtDlpSourceMediaDownloader implements SourceMediaDownloader {
   async download(input: { sourceUrl: string; outputPath: string; maxSourceBytes: number; maxDurationSec: number }) {
     assertAllowedBilibiliUrl(input.sourceUrl);
+    const outputTemplate = `${input.outputPath}.%(ext)s`;
     await runCommand(appEnv.YT_DLP_PATH, [
       "--no-playlist",
       "--no-cookies",
@@ -70,12 +72,13 @@ export class YtDlpSourceMediaDownloader implements SourceMediaDownloader {
       "--max-filesize",
       String(input.maxSourceBytes),
       "--output",
-      input.outputPath,
+      outputTemplate,
       input.sourceUrl
     ]);
 
-    await assertFileWithinLimit(input.outputPath, input.maxSourceBytes, "Downloaded source is too large");
-    return { sourcePath: input.outputPath };
+    const sourcePath = await findDownloadedSourcePath(input.outputPath);
+    await assertFileWithinLimit(sourcePath, input.maxSourceBytes, "Downloaded source is too large");
+    return { sourcePath };
   }
 }
 
@@ -142,9 +145,13 @@ function buildFfmpegTranscodeArgs(input: { sourcePath: string; outputPath: strin
 @Injectable()
 export class LocalAudioWorkerService {
   constructor(
+    @Inject(PrismaService)
     private readonly prisma: PrismaWorkerClient,
+    @Inject(LocalAudioTempStorageService)
     private readonly tempStorage: LocalAudioTempStorageService,
+    @Inject(LocalAudioStagingStorageService)
     private readonly stagingStorage: LocalAudioStagingStorageService,
+    @Inject(FileHashService)
     private readonly fileHash: FileHashService,
     @Inject("SourceMediaDownloader")
     private readonly downloader: SourceMediaDownloader,
@@ -316,6 +323,28 @@ async function assertFileWithinLimit(filePath: string, maxBytes: number, message
   if (stats.size > maxBytes) {
     throw new BadRequestException(message);
   }
+}
+
+async function findDownloadedSourcePath(outputPath: string) {
+  try {
+    await stat(outputPath);
+    return outputPath;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  const directory = dirname(outputPath);
+  const prefix = `${basename(outputPath)}.`;
+  const entries = await readdir(directory, { withFileTypes: true });
+  const match = entries.find((entry) => entry.isFile() && entry.name.startsWith(prefix));
+
+  if (!match) {
+    throw new BadRequestException("Downloaded source file was not created");
+  }
+
+  return join(directory, match.name);
 }
 
 function runCommand(command: string, args: string[]) {
