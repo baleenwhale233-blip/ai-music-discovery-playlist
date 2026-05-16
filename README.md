@@ -69,14 +69,6 @@ pnpm setup:alpha-db
 pnpm verify:alpha-web
 ```
 
-Internal local-audio diagnostic commands:
-
-```bash
-pnpm dev:local-audio-clean
-pnpm test:local-audio-clean
-pnpm verify:local-audio-clean
-```
-
 ## Verification
 
 ```bash
@@ -93,6 +85,7 @@ pnpm verify:alpha-web
 - Web IA: [docs/web-ia.md](docs/web-ia.md)
 - Technical Architecture: [docs/technical-architecture.md](docs/technical-architecture.md)
 - Current State: [docs/current-state.md](docs/current-state.md)
+- Decisions: [docs/decisions.md](docs/decisions.md)
 
 ## Out of Scope
 

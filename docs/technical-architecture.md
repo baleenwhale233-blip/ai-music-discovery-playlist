@@ -175,11 +175,3 @@ pnpm dev:api
 pnpm dev:web
 pnpm verify:alpha-web
 ```
-
-Clean-room local-audio scripts remain available for internal diagnostics:
-
-```bash
-pnpm dev:local-audio-clean
-pnpm test:local-audio-clean
-pnpm verify:local-audio-clean
-```

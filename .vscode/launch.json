@@ -2,6 +2,57 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "API Debug",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "exec",
+        "tsx",
+        "watch",
+        "--tsconfig",
+        "tsconfig.json",
+        "src/main.ts"
+      ],
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true,
+      "envFile": "${workspaceFolder}/apps/api/.env",
+      "env": {
+        "LOCAL_AUDIO_WORKER_ENABLED": "true"
+      }
+    },
+    {
+      "name": "API Test: Local Audio Lifecycle",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "exec",
+        "vitest",
+        "run",
+        "src/modules/contents/local-audio-lifecycle.test.ts"
+      ],
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true
+    },
+    {
+      "name": "API Test: All",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "exec",
+        "vitest",
+        "run",
+        "--passWithNoTests"
+      ],
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true
+    },
+    {
       "name": "API Dev",
       "type": "node-terminal",
       "request": "launch",
@@ -20,13 +71,6 @@
       "type": "node-terminal",
       "request": "launch",
       "command": "pnpm --filter @ai-music-playlist/admin dev",
-      "cwd": "${workspaceFolder}"
-    },
-    {
-      "name": "Local Audio Clean Room",
-      "type": "node-terminal",
-      "request": "launch",
-      "command": "pnpm dev:local-audio-clean",
       "cwd": "${workspaceFolder}"
     }
   ],

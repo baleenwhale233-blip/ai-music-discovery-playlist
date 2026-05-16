@@ -58,6 +58,48 @@
       "problemMatcher": []
     },
     {
+      "label": "api:typecheck",
+      "type": "shell",
+      "command": "pnpm --filter @ai-music-playlist/api typecheck",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "api:test",
+      "type": "shell",
+      "command": "pnpm --filter @ai-music-playlist/api test",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "api:test-local-audio-lifecycle",
+      "type": "shell",
+      "command": "pnpm --filter @ai-music-playlist/api test -- src/modules/contents/local-audio-lifecycle.test.ts",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "admin:dev",
       "type": "shell",
       "command": "pnpm --filter @ai-music-playlist/admin dev",
@@ -81,20 +123,6 @@
           "endsPattern": "Ready in"
         }
       }
-    },
-    {
-      "label": "local-audio-clean:verify",
-      "type": "shell",
-      "command": "pnpm verify:local-audio-clean",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      },
-      "problemMatcher": []
     }
   ]
 }
