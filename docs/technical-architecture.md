@@ -114,13 +114,25 @@ The source parsing implementation belongs in `apps/api`; shared packages only ex
 
 Local audio caching is user initiated.
 
-The API creates or updates `LocalAudioAsset` records and writes files under the configured local cache root. Cached assets include audio file metadata, optional cover cache metadata, cache status, and error details.
+The API creates or reuses `LocalAudioAsset` records and creates `ConversionTask` records. Cache requests return immediately; clients poll task status instead of holding an API request open while download or ffmpeg work runs.
 
-Conversion uses `yt-dlp` and `ffmpeg` in the current local/self-hosted setup. The architecture allows moving heavier conversion work to a separate worker without changing the Web product boundary.
+The current backend mode is local-only and self-hosted:
+
+- task temp files live under `LOCAL_AUDIO_TEMP_ROOT`, keyed by task id.
+- final server staging artifacts live under `LOCAL_AUDIO_STAGING_ROOT`, keyed by asset id and generated artifact id.
+- user-device assets are metadata-only records after the client confirms local storage.
+
+Conversion uses `yt-dlp` and `ffmpeg` in the current local/self-hosted setup. The in-process worker can be disabled with `LOCAL_AUDIO_WORKER_ENABLED=false`; Redis/BullMQ remain optional infrastructure rather than a hard dependency for this local path.
+
+The worker deletes source downloads, source audio/video streams, fragments, intermediate files, and ffmpeg temp files when a task succeeds or fails. The final staging artifact remains only long enough for the authenticated client to download it. After the client confirms local storage with matching hash and size, the API deletes the staging artifact and marks the asset as `USER_DEVICE`.
+
+If the client never confirms, cleanup deletes expired staging artifacts after `LOCAL_AUDIO_STAGING_TTL_HOURS` and records a retryable failure on the asset. Cleanup also removes stale task temp directories older than `LOCAL_AUDIO_TEMP_TTL_HOURS`.
+
+This path is not public audio hosting. It does not accept user cookies, does not bypass DRM, login walls, paid access, region limits, or other access controls, and does not share audio files across users.
 
 ## Playback
 
-Playback uses cached audio assets served by the API. Audio endpoints support:
+Playback and download use authenticated local audio asset endpoints. Staging artifact downloads support:
 
 - `Range` requests.
 - `206 Partial Content`.

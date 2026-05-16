@@ -161,19 +161,26 @@ export const importCacheRequestSchema = z.object({
   sourceContentIds: z.array(z.string()).optional()
 });
 
+export const localAudioAssetStatusSchema = z.enum(["pending", "caching", "ready", "failed", "deleted"]);
+export const localAudioStorageTypeSchema = z.enum(["self_hosted_node", "cloud_temp", "user_device"]);
+export const conversionTaskStatusSchema = z.enum(["created", "queued", "running", "succeeded", "failed", "canceled"]);
+
 export const importCacheResponseSchema = z.object({
   collectionId: z.string(),
   cachedCount: z.number(),
   failedCount: z.number(),
-  playlistItemIds: z.array(z.string())
+  queuedCount: z.number().optional(),
+  playlistItemIds: z.array(z.string()),
+  assetIds: z.array(z.string()).optional(),
+  taskIds: z.array(z.string()).optional()
 });
 
 export const sourceContentCacheResponseSchema = z.object({
   sourceContentId: z.string(),
-  cacheKey: z.string(),
-  audioUrl: z.string(),
-  coverUrl: z.string().nullable(),
-  status: z.enum(["ready", "failed"]),
+  assetId: z.string(),
+  taskId: z.string(),
+  assetStatus: localAudioAssetStatusSchema,
+  taskStatus: conversionTaskStatusSchema,
   message: z.string()
 });
 
@@ -211,6 +218,47 @@ export const localAudioPlaylistResponseSchema = z.object({
   items: z.array(localAudioPlaylistItemSchema)
 });
 
+export const localAudioCacheRequestCreateSchema = z.object({
+  sourceContentId: z.string().min(1),
+  playlistId: z.string().min(1).optional(),
+  playlistItemId: z.string().min(1).optional()
+});
+
+export const localAudioCacheRequestCreateResponseSchema = z.object({
+  assetId: z.string(),
+  taskId: z.string(),
+  assetStatus: localAudioAssetStatusSchema,
+  taskStatus: conversionTaskStatusSchema
+});
+
+export const localAudioTaskStatusResponseSchema = z.object({
+  taskId: z.string(),
+  assetId: z.string().nullable(),
+  status: conversionTaskStatusSchema,
+  progress: z.number().nullable().optional(),
+  errorMessage: z.string().nullable(),
+  startedAt: z.string().nullable(),
+  finishedAt: z.string().nullable(),
+  artifactReady: z.boolean()
+});
+
+export const localAudioConfirmClientCacheRequestSchema = z.object({
+  sha256: z.string().regex(/^[0-9a-f]{64}$/i),
+  sizeBytes: z.number().int().nonnegative(),
+  clientStorageKind: z.enum(["opfs", "indexeddb", "cache_api", "unknown"]),
+  clientStorageKey: z.string().min(1).optional()
+});
+
+export const localAudioConfirmClientCacheResponseSchema = z.object({
+  assetId: z.string(),
+  status: localAudioAssetStatusSchema,
+  storageType: localAudioStorageTypeSchema,
+  sha256: z.string().nullable(),
+  sizeBytes: z.number().nullable(),
+  clientCachedAt: z.string().nullable(),
+  serverDeletedAt: z.string().nullable()
+});
+
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export type AuthRequestCodeInput = z.infer<typeof authRequestCodeSchema>;
 export type AuthVerifyCodeInput = z.infer<typeof authVerifyCodeSchema>;
@@ -237,3 +285,11 @@ export type ExperimentalPlaylistResponse = z.infer<typeof experimentalPlaylistRe
 export type LocalAudioPlaylist = z.infer<typeof localAudioPlaylistSchema>;
 export type LocalAudioPlaylistItem = z.infer<typeof localAudioPlaylistItemSchema>;
 export type LocalAudioPlaylistResponse = z.infer<typeof localAudioPlaylistResponseSchema>;
+export type LocalAudioAssetStatus = z.infer<typeof localAudioAssetStatusSchema>;
+export type LocalAudioStorageType = z.infer<typeof localAudioStorageTypeSchema>;
+export type ConversionTaskStatus = z.infer<typeof conversionTaskStatusSchema>;
+export type LocalAudioCacheRequestCreate = z.infer<typeof localAudioCacheRequestCreateSchema>;
+export type LocalAudioCacheRequestCreateResponse = z.infer<typeof localAudioCacheRequestCreateResponseSchema>;
+export type LocalAudioTaskStatusResponse = z.infer<typeof localAudioTaskStatusResponseSchema>;
+export type LocalAudioConfirmClientCacheRequest = z.infer<typeof localAudioConfirmClientCacheRequestSchema>;
+export type LocalAudioConfirmClientCacheResponse = z.infer<typeof localAudioConfirmClientCacheResponseSchema>;

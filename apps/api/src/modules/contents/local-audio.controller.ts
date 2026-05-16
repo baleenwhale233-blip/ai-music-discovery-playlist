@@ -1,23 +1,48 @@
-import { Controller, Get, Headers, Inject, Param, Res, StreamableFile, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Inject, NotFoundException, Param, Post, Res, StreamableFile, UseGuards } from "@nestjs/common";
+import {
+  localAudioCacheRequestCreateSchema,
+  localAudioConfirmClientCacheRequestSchema,
+  type LocalAudioCacheRequestCreateResponse,
+  type LocalAudioConfirmClientCacheResponse,
+  type LocalAudioTaskStatusResponse
+} from "@ai-music-playlist/api-contract";
 
+import { appEnv } from "../../config/env";
 import type { AlphaAccessTokenPayload } from "../auth/alpha-auth";
 import { AlphaAuthGuard } from "../auth/alpha-auth.guard";
 import { CurrentAlphaUser } from "../auth/current-alpha-user.decorator";
-import { ContentsService } from "./contents.service";
+import { LocalAudioCleanupService } from "./local-audio-cleanup.service";
 import { parseHttpRange } from "./local-audio-cache";
+import { LocalAudioService } from "./local-audio.service";
 
 @Controller("local-audio")
 @UseGuards(AlphaAuthGuard)
 export class LocalAudioController {
-  constructor(@Inject(ContentsService) private readonly contentsService: ContentsService) {
-    this.getAudio = this.getAudio.bind(this);
-    this.getCover = this.getCover.bind(this);
+  constructor(
+    @Inject(LocalAudioService) private readonly localAudioService: LocalAudioService,
+    @Inject(LocalAudioCleanupService) private readonly cleanupService: LocalAudioCleanupService,
+  ) {}
+
+  @Post("cache-requests")
+  requestCache(
+    @CurrentAlphaUser() user: AlphaAccessTokenPayload,
+    @Body() body: unknown,
+  ): Promise<LocalAudioCacheRequestCreateResponse> {
+    return this.localAudioService.requestCache(user.userId, localAudioCacheRequestCreateSchema.parse(body));
   }
 
-  @Get(":cacheKey/audio")
-  async getAudio(
+  @Get("tasks/:taskId")
+  getTaskStatus(
     @CurrentAlphaUser() user: AlphaAccessTokenPayload,
-    @Param("cacheKey") cacheKey: string,
+    @Param("taskId") taskId: string,
+  ): Promise<LocalAudioTaskStatusResponse> {
+    return this.localAudioService.getTaskStatus(user.userId, taskId);
+  }
+
+  @Get("assets/:assetId/download")
+  async downloadAsset(
+    @CurrentAlphaUser() user: AlphaAccessTokenPayload,
+    @Param("assetId") assetId: string,
     @Headers("range") rangeHeader: string | undefined,
     @Res({ passthrough: true })
     response: {
@@ -25,23 +50,22 @@ export class LocalAudioController {
       status: (code: number) => unknown;
     },
   ) {
-    const audio = await this.contentsService.getCachedLocalAudioForUser(user.userId, cacheKey);
+    const audio = await this.localAudioService.getDownloadableAsset(user.userId, assetId);
     const parsedRange = parseHttpRange(rangeHeader, audio.totalSize);
 
     response.setHeader("content-type", audio.contentType);
-    response.setHeader("cache-control", "private, max-age=3600");
+    response.setHeader("cache-control", "private, no-store");
     response.setHeader("accept-ranges", "bytes");
 
     if (parsedRange?.kind === "invalid") {
       response.status(416);
       response.setHeader("content-range", parsedRange.contentRange);
       response.setHeader("content-length", 0);
-
       return undefined;
     }
 
     if (parsedRange?.kind === "range") {
-      const rangedAudio = await this.contentsService.getCachedLocalAudioRangeForUser(user.userId, cacheKey, {
+      const rangedAudio = await this.localAudioService.getDownloadableAssetRange(user.userId, assetId, {
         start: parsedRange.start,
         end: parsedRange.end
       });
@@ -54,21 +78,28 @@ export class LocalAudioController {
     }
 
     response.setHeader("content-length", audio.totalSize);
-
     return new StreamableFile(audio.stream);
   }
 
-  @Get(":cacheKey/cover")
-  async getCover(
+  @Post("assets/:assetId/confirm-client-cache")
+  confirmClientCache(
     @CurrentAlphaUser() user: AlphaAccessTokenPayload,
-    @Param("cacheKey") cacheKey: string,
-    @Res({ passthrough: true }) response: { setHeader: (name: string, value: string) => void },
-  ) {
-    const cover = await this.contentsService.getCachedLocalCoverForUser(user.userId, cacheKey);
+    @Param("assetId") assetId: string,
+    @Body() body: unknown,
+  ): Promise<LocalAudioConfirmClientCacheResponse> {
+    return this.localAudioService.confirmClientCache(
+      user.userId,
+      assetId,
+      localAudioConfirmClientCacheRequestSchema.parse(body),
+    );
+  }
 
-    response.setHeader("content-type", cover.contentType);
-    response.setHeader("cache-control", "private, max-age=3600");
+  @Post("internal/cleanup-expired")
+  cleanupExpired() {
+    if (!appEnv.ENABLE_DEBUG_ROUTES) {
+      throw new NotFoundException("Debug routes are disabled");
+    }
 
-    return new StreamableFile(cover.stream);
+    return this.cleanupService.cleanupExpired();
   }
 }

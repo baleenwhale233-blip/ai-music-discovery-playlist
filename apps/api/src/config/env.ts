@@ -12,6 +12,18 @@ const apiEnvSchema = z.object({
   ALPHA_INVITE_CODE: z.string().default("alpha-50"),
   ACCESS_TOKEN_EXPIRES_IN_SECONDS: z.coerce.number().default(60 * 60 * 24 * 7),
   LOCAL_AUDIO_CACHE_DIR: z.string().default(".local-audio-cache"),
+  LOCAL_AUDIO_CACHE_ROOT: z.string().optional(),
+  LOCAL_AUDIO_TEMP_ROOT: z.string().default(".local/audio/tmp"),
+  LOCAL_AUDIO_STAGING_ROOT: z.string().default(".local/audio/staging"),
+  LOCAL_AUDIO_STAGING_TTL_HOURS: z.coerce.number().positive().default(24),
+  LOCAL_AUDIO_TEMP_TTL_HOURS: z.coerce.number().positive().default(2),
+  LOCAL_AUDIO_MAX_DURATION_SEC: z.coerce.number().int().positive().default(60 * 60 * 2),
+  LOCAL_AUDIO_MAX_SOURCE_BYTES: z.coerce.number().int().positive().default(1024 * 1024 * 1024),
+  LOCAL_AUDIO_MAX_OUTPUT_BYTES: z.coerce.number().int().positive().default(1024 * 1024 * 512),
+  LOCAL_AUDIO_WORKER_ENABLED: z.string().optional(),
+  LOCAL_AUDIO_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(1),
+  FFMPEG_PATH: z.string().default("ffmpeg"),
+  YT_DLP_PATH: z.string().default("yt-dlp"),
   CORS_ALLOWED_ORIGINS: z.string().default(""),
   ENABLE_EXPERIMENTAL_ROUTES: z.string().optional(),
   ENABLE_DEBUG_ROUTES: z.string().optional()
@@ -83,9 +95,11 @@ const isProduction = rawAppEnv.NODE_ENV === "production";
 
 export const appEnv = {
   ...rawAppEnv,
+  LOCAL_AUDIO_CACHE_ROOT: rawAppEnv.LOCAL_AUDIO_CACHE_ROOT ?? rawAppEnv.LOCAL_AUDIO_CACHE_DIR,
   CORS_ALLOWED_ORIGINS: parseAllowedCorsOrigins(rawAppEnv.CORS_ALLOWED_ORIGINS),
   ENABLE_EXPERIMENTAL_ROUTES: parseBooleanEnvFlag(rawAppEnv.ENABLE_EXPERIMENTAL_ROUTES, !isProduction),
-  ENABLE_DEBUG_ROUTES: parseBooleanEnvFlag(rawAppEnv.ENABLE_DEBUG_ROUTES, !isProduction)
+  ENABLE_DEBUG_ROUTES: parseBooleanEnvFlag(rawAppEnv.ENABLE_DEBUG_ROUTES, !isProduction),
+  LOCAL_AUDIO_WORKER_ENABLED: parseBooleanEnvFlag(rawAppEnv.LOCAL_AUDIO_WORKER_ENABLED, !isProduction)
 };
 
 assertProductionSafeEnv(appEnv);
@@ -104,6 +118,18 @@ process.env.ALPHA_LOGIN_CODE ??= appEnv.ALPHA_LOGIN_CODE;
 process.env.ALPHA_INVITE_CODE ??= appEnv.ALPHA_INVITE_CODE;
 process.env.ACCESS_TOKEN_EXPIRES_IN_SECONDS ??= String(appEnv.ACCESS_TOKEN_EXPIRES_IN_SECONDS);
 process.env.LOCAL_AUDIO_CACHE_DIR ??= appEnv.LOCAL_AUDIO_CACHE_DIR;
+process.env.LOCAL_AUDIO_CACHE_ROOT ??= appEnv.LOCAL_AUDIO_CACHE_ROOT;
+process.env.LOCAL_AUDIO_TEMP_ROOT ??= appEnv.LOCAL_AUDIO_TEMP_ROOT;
+process.env.LOCAL_AUDIO_STAGING_ROOT ??= appEnv.LOCAL_AUDIO_STAGING_ROOT;
+process.env.LOCAL_AUDIO_STAGING_TTL_HOURS ??= String(appEnv.LOCAL_AUDIO_STAGING_TTL_HOURS);
+process.env.LOCAL_AUDIO_TEMP_TTL_HOURS ??= String(appEnv.LOCAL_AUDIO_TEMP_TTL_HOURS);
+process.env.LOCAL_AUDIO_MAX_DURATION_SEC ??= String(appEnv.LOCAL_AUDIO_MAX_DURATION_SEC);
+process.env.LOCAL_AUDIO_MAX_SOURCE_BYTES ??= String(appEnv.LOCAL_AUDIO_MAX_SOURCE_BYTES);
+process.env.LOCAL_AUDIO_MAX_OUTPUT_BYTES ??= String(appEnv.LOCAL_AUDIO_MAX_OUTPUT_BYTES);
+process.env.LOCAL_AUDIO_WORKER_ENABLED ??= String(appEnv.LOCAL_AUDIO_WORKER_ENABLED);
+process.env.LOCAL_AUDIO_WORKER_CONCURRENCY ??= String(appEnv.LOCAL_AUDIO_WORKER_CONCURRENCY);
+process.env.FFMPEG_PATH ??= appEnv.FFMPEG_PATH;
+process.env.YT_DLP_PATH ??= appEnv.YT_DLP_PATH;
 process.env.CORS_ALLOWED_ORIGINS ??= rawAppEnv.CORS_ALLOWED_ORIGINS;
 process.env.ENABLE_EXPERIMENTAL_ROUTES ??= String(appEnv.ENABLE_EXPERIMENTAL_ROUTES);
 process.env.ENABLE_DEBUG_ROUTES ??= String(appEnv.ENABLE_DEBUG_ROUTES);

@@ -28,7 +28,8 @@ describe("buildLocalAudioPlaylistResponse", () => {
           localAudioAsset: {
             id: "asset-1",
             cacheKey: "user-1_BV1B7411m7LV",
-            status: "READY"
+            status: "READY",
+            storageType: "SELF_HOSTED_NODE"
           }
         }
       ]
@@ -37,8 +38,8 @@ describe("buildLocalAudioPlaylistResponse", () => {
     expect(response.playlist.itemCount).toBe(1);
     expect(response.playlist.cachedItemCount).toBe(1);
     expect(response.items[0]).toMatchObject({
-      audioUrl: "/api/v1/local-audio/user-1_BV1B7411m7LV/audio",
-      coverUrl: "/api/v1/local-audio/user-1_BV1B7411m7LV/cover",
+      audioUrl: "/api/v1/local-audio/assets/asset-1/download",
+      coverUrl: "/api/v1/contents/cover?url=https%3A%2F%2Fi0.hdslb.com%2Fcover.jpg",
       status: "ready"
     });
   });

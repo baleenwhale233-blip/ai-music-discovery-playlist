@@ -343,6 +343,12 @@ model LocalAudioAsset {
   mimeType          String?               @map("mime_type")
   fileSizeBytes     Int?                  @map("file_size_bytes")
   durationSec       Int?                  @map("duration_sec")
+  sha256            String?
+  serverArtifactExpiresAt DateTime?       @map("server_artifact_expires_at")
+  clientCachedAt    DateTime?             @map("client_cached_at")
+  serverDeletedAt   DateTime?             @map("server_deleted_at")
+  clientStorageKind String?               @map("client_storage_kind")
+  clientStorageKey  String?               @map("client_storage_key")
   status            LocalAudioAssetStatus @default(PENDING)
   lastError         String?               @map("last_error")
   lastAccessedAt    DateTime?             @map("last_accessed_at")
@@ -359,6 +365,7 @@ model LocalAudioAsset {
   @@unique([userId, sourceContentId])
   @@index([userId, status])
   @@index([sourceContentId, status])
+  @@index([storageType, status, serverArtifactExpiresAt])
   @@map("local_audio_assets")
 }
 

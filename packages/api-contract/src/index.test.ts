@@ -6,7 +6,11 @@ import {
   authVerifyCodeResponseSchema,
   bilibiliFavoritePreviewResponseSchema,
   importPreviewResponseSchema,
+  localAudioCacheRequestCreateResponseSchema,
+  localAudioConfirmClientCacheRequestSchema,
+  localAudioConfirmClientCacheResponseSchema,
   localAudioPlaylistResponseSchema,
+  localAudioTaskStatusResponseSchema,
   modulePrefixes
 } from "./index";
 
@@ -139,5 +143,52 @@ describe("api-contract package", () => {
     });
 
     expect(parsed.items[0]?.audioUrl).toContain("/api/v1/local-audio/");
+  });
+
+  it("keeps the task-based local audio cache response contract", () => {
+    const parsed = localAudioCacheRequestCreateResponseSchema.parse({
+      assetId: "asset-1",
+      taskId: "task-1",
+      assetStatus: "pending",
+      taskStatus: "queued"
+    });
+
+    expect(parsed.assetId).toBe("asset-1");
+    expect(parsed.taskStatus).toBe("queued");
+  });
+
+  it("keeps the local audio task status response contract", () => {
+    const parsed = localAudioTaskStatusResponseSchema.parse({
+      taskId: "task-1",
+      assetId: "asset-1",
+      status: "running",
+      progress: null,
+      errorMessage: null,
+      startedAt: "2026-05-16T00:00:00.000Z",
+      finishedAt: null,
+      artifactReady: false
+    });
+
+    expect(parsed.artifactReady).toBe(false);
+  });
+
+  it("keeps the local audio client confirmation contracts", () => {
+    const request = localAudioConfirmClientCacheRequestSchema.parse({
+      sha256: "a".repeat(64),
+      sizeBytes: 123,
+      clientStorageKind: "opfs",
+      clientStorageKey: "tracks/asset-1"
+    });
+    const response = localAudioConfirmClientCacheResponseSchema.parse({
+      assetId: "asset-1",
+      status: "ready",
+      storageType: "user_device",
+      sha256: request.sha256,
+      sizeBytes: 123,
+      clientCachedAt: "2026-05-16T00:00:00.000Z",
+      serverDeletedAt: "2026-05-16T00:00:00.000Z"
+    });
+
+    expect(response.storageType).toBe("user_device");
   });
 });

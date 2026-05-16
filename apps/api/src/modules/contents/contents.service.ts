@@ -38,6 +38,7 @@ import {
   parseBilibiliLink
 } from "./bilibili-link.parser";
 import { LocalAudioConversionService } from "./local-audio-conversion.service";
+import { LocalAudioService } from "./local-audio.service";
 import {
   buildFfmpegAudioExtractArgs,
   BILIBILI_DESKTOP_USER_AGENT,
@@ -101,6 +102,7 @@ export class ContentsService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(LocalAudioConversionService) private readonly localAudioConversion: LocalAudioConversionService,
+    @Inject(LocalAudioService) private readonly localAudioService: LocalAudioService,
   ) {}
 
   async previewImportForUser(
@@ -306,16 +308,25 @@ export class ContentsService {
       return true;
     });
     const playlistItemIds: string[] = [];
-    let cachedCount = 0;
+    const assetIds: string[] = [];
+    const taskIds: string[] = [];
+    let queuedCount = 0;
     let failedCount = 0;
 
     for (const item of selectedItems) {
       try {
-        const result = await this.cacheBilibiliAudioForUser(userId, {
-          url: item.sourceContent.canonicalUrl
+        const result = await this.localAudioService.requestCache(userId, {
+          sourceContentId: item.sourceContentId
         });
-        playlistItemIds.push(result.playlistItemId);
-        cachedCount += 1;
+        const playlistItem = await this.attachSourceContentToLocalAudioPlaylist({
+          userId,
+          sourceContent: item.sourceContent,
+          localAudioAssetId: result.assetId
+        });
+        playlistItemIds.push(playlistItem.id);
+        assetIds.push(result.assetId);
+        taskIds.push(result.taskId);
+        queuedCount += 1;
       } catch {
         failedCount += 1;
       }
@@ -323,9 +334,12 @@ export class ContentsService {
 
     return {
       collectionId,
-      cachedCount,
+      cachedCount: queuedCount,
       failedCount,
-      playlistItemIds
+      queuedCount,
+      playlistItemIds,
+      assetIds,
+      taskIds
     };
   }
 
@@ -343,17 +357,22 @@ export class ContentsService {
       throw new BadRequestException("Source content not found");
     }
 
-    const result = await this.cacheBilibiliAudioForUser(userId, {
-      url: sourceContent.canonicalUrl
+    const result = await this.localAudioService.requestCache(userId, {
+      sourceContentId: sourceContent.id
+    });
+    await this.attachSourceContentToLocalAudioPlaylist({
+      userId,
+      sourceContent,
+      localAudioAssetId: result.assetId
     });
 
     return {
-      sourceContentId: result.sourceContentId,
-      cacheKey: result.cacheKey,
-      audioUrl: result.audioUrl,
-      coverUrl: result.coverUrl,
-      status: result.status,
-      message: result.message
+      sourceContentId: sourceContent.id,
+      assetId: result.assetId,
+      taskId: result.taskId,
+      assetStatus: result.assetStatus,
+      taskStatus: result.taskStatus,
+      message: "已创建本地音频缓存任务。"
     };
   }
 
@@ -1154,6 +1173,47 @@ export class ContentsService {
       stream: createReadStream(coverFile),
       contentType: this.getCoverContentType(coverFile)
     };
+  }
+
+  private async attachSourceContentToLocalAudioPlaylist(input: {
+    userId: string;
+    sourceContent: {
+      id: string;
+      title: string;
+      coverUrl: string | null;
+      durationSec: number | null;
+    };
+    localAudioAssetId: string;
+  }) {
+    const playlist = await this.ensureLocalAudioPlaylist(input.userId);
+    const nextPosition = await this.getNextPlaylistPosition(playlist.id);
+    const playlistItem = await this.prisma.playlistItem.upsert({
+      where: {
+        playlistId_sourceContentId: {
+          playlistId: playlist.id,
+          sourceContentId: input.sourceContent.id
+        }
+      },
+      create: {
+        playlistId: playlist.id,
+        sourceContentId: input.sourceContent.id,
+        localAudioAssetId: input.localAudioAssetId,
+        position: nextPosition,
+        titleSnapshot: input.sourceContent.title,
+        coverUrlSnapshot: input.sourceContent.coverUrl,
+        durationSecSnapshot: input.sourceContent.durationSec,
+        addedByUserId: input.userId
+      },
+      update: {
+        localAudioAssetId: input.localAudioAssetId,
+        titleSnapshot: input.sourceContent.title,
+        coverUrlSnapshot: input.sourceContent.coverUrl,
+        durationSecSnapshot: input.sourceContent.durationSec
+      }
+    });
+    await this.refreshPlaylistCounts(playlist.id);
+
+    return playlistItem;
   }
 
   private async cacheBilibiliAudioForUser(userId: string, input: LocalAudioCacheRequest) {

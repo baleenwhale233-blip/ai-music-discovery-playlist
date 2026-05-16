@@ -12,9 +12,14 @@
 - B 站 single-link parsing.
 - B 站 favorite, playlist, medialist, and collection preview parsing.
 - Import preview contracts, excluded item update contracts, and cache request contracts.
-- Local audio cache service.
+- Task-based local audio cache service.
+- Local audio conversion task creation and status polling.
+- In-process local audio worker for local-only conversion.
+- Local audio temp and staging filesystem services with root containment checks.
+- Local audio client-cache confirmation that deletes server staging artifacts.
+- Local audio cleanup service for expired staging artifacts and stale temp dirs.
 - Local audio playlist endpoint.
-- Audio file serving with Range support.
+- Authenticated staging artifact download with Range support.
 - Cover image proxying for B 站 images.
 - Prisma schema for source content, source collections, playlists, playlist items, local audio assets, conversion tasks, favorites, play history, and content metadata.
 - Redis and queue platform services.
@@ -33,7 +38,7 @@
 - Playlist publishing exists in the Web prototype repository and is not fully backed by persistent API playlist endpoints.
 - `/playlists/[playlistId]` can trigger cache operations for parsed candidates, while richer playlist editing remains lightweight.
 - SourceCollectionPreview semantics are represented through import preview contracts and API services, but the product flow still uses Web-local draft data in places.
-- ConversionTask exists in the Prisma model, while local Alpha cache work can still run without a full distributed worker setup.
+- ConversionTask is now the persisted lifecycle record for local audio cache work. The default worker is in-process and local-only; Redis/BullMQ can remain infrastructure for later distributed workers.
 - Redis and BullMQ infrastructure are present, but Redis is not a hard dependency for every local verification path.
 - `apps/admin` provides internal/debug surfaces, not a polished admin product.
 - `apps/mobile` exists as a native-shell reserve and is not part of Alpha verification.
@@ -47,13 +52,14 @@
 - Full cloud conversion worker deployment.
 - Complete backend-backed playlist CRUD for all Web prototype behavior.
 - Full cache retry UI and detailed background job progress UI.
+- Browser-side OPFS/IndexedDB/Cache API persistence and confirm-call wiring in the Web player.
 - Production-ready source availability and regional rollout controls.
 
 ## Known Gaps
 
 - Web draft and published playlist prototype data still relies on localStorage.
 - YouTube is visible as an experimental source option in the add flow, but the Alpha import path is centered on B 站.
-- Some cache and import flows depend on local tools such as `ffmpeg` and `yt-dlp`.
+- Local audio worker depends on local tools such as `ffmpeg` and `yt-dlp` when real conversion is enabled. Unit tests use fake downloader/converter paths.
 - Local verification may require PostgreSQL and app env setup.
 - Debug and generated build artifacts can exist locally, but they are outside the authoritative product path.
 
@@ -62,6 +68,7 @@
 - Move playlist draft, publish, and detail operations behind persistent `/api/v1` endpoints.
 - Connect Web playlist detail state directly to backend playlist and import models.
 - Add clearer cache progress and retry behavior.
+- Wire the Web player to download staging artifacts, save them to device-local storage, and call client-cache confirmation.
 - Keep the player route aligned with playlist-specific cached queues.
 - Decide when to promote queue-backed conversion from infrastructure to the default Alpha path.
 - Add focused end-to-end smoke coverage for login, add link, publish, cache, and player playback.

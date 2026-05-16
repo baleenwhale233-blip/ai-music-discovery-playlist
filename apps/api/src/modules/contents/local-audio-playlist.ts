@@ -26,6 +26,7 @@ type PlaylistItemModel = {
     id: string;
     cacheKey: string;
     status: string;
+    storageType?: string;
   } | null;
 };
 
@@ -56,11 +57,7 @@ function normalizeStatus(status: string | null | undefined): LocalAudioStatus {
   }
 }
 
-function buildPlaylistCoverUrl(item: PlaylistItemModel, cacheKey: string | null, status: LocalAudioStatus) {
-  if (cacheKey && status === "ready") {
-    return `/api/v1/local-audio/${encodeURIComponent(cacheKey)}/cover`;
-  }
-
+function buildPlaylistCoverUrl(item: PlaylistItemModel) {
   const sourceCoverUrl = item.coverUrlSnapshot ?? item.sourceContent.coverUrl;
 
   return buildBilibiliCoverProxyPath(sourceCoverUrl) ?? sourceCoverUrl;
@@ -76,6 +73,7 @@ export function buildLocalAudioPlaylistResponse(input: {
     .map((item) => {
       const cacheKey = item.localAudioAsset?.cacheKey ?? null;
       const status = normalizeStatus(item.localAudioAsset?.status);
+      const hasServerArtifact = status === "ready" && item.localAudioAsset?.storageType !== "USER_DEVICE";
 
       return {
         id: item.id,
@@ -83,10 +81,10 @@ export function buildLocalAudioPlaylistResponse(input: {
         localAudioAssetId: item.localAudioAssetId,
         position: item.position,
         title: item.titleSnapshot ?? item.sourceContent.title,
-        coverUrl: buildPlaylistCoverUrl(item, cacheKey, status),
+        coverUrl: buildPlaylistCoverUrl(item),
         durationSeconds: item.durationSecSnapshot ?? item.sourceContent.durationSec,
-        audioUrl: cacheKey && status === "ready"
-          ? `/api/v1/local-audio/${encodeURIComponent(cacheKey)}/audio`
+        audioUrl: item.localAudioAsset?.id && hasServerArtifact
+          ? `/api/v1/local-audio/assets/${encodeURIComponent(item.localAudioAsset.id)}/download`
           : null,
         cacheKey,
         status

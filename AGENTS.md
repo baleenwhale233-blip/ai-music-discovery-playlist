@@ -15,6 +15,18 @@ This repository is currently focused on the Mobile Web Alpha for AI Music Discov
 
 The current product is a Mobile Web First music directory and local playlist tool. Users add source links, organize them into playlists, actively cache personal local audio assets, and play cached audio through a real media element.
 
+## Context Management
+
+Use layered context instead of a chronological development log.
+
+- Entry layer: `README.md` explains what the repository is and how to run it.
+- Product layer: `docs/product.md`, `docs/web-ia.md`, and `docs/technical-architecture.md` define the current product, IA, and architecture.
+- Snapshot layer: `docs/current-state.md` is the rolling implementation snapshot. Update it after meaningful work by rewriting the current facts, not by appending a dated journal.
+- Decision layer: long-lived product or architecture decisions should be captured as current effective decisions. If a decision needs its own durable record, add or update `docs/decisions.md` or an ADR under `docs/adr/`.
+- Handoff layer: use `git status --short` plus the current diff to understand active WIP. Treat existing uncommitted changes as intentional unless they directly conflict with the task.
+
+Do not recreate a broad chronological journal. PR descriptions, commit messages, and review notes should carry temporary process history; repository docs should carry current facts and still-active decisions.
+
 ## Workspace Boundaries
 
 - `apps/web`: Mobile Web product.
