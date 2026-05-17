@@ -5,6 +5,7 @@ This file records current effective product and architecture decisions. It is no
 ## Product Boundary
 
 - The Alpha product is Mobile Web First: users organize source links into playlists, actively cache personal local audio assets, and play cached audio through a real media element.
+- Product-facing language should describe the product as a video-to-audio playlist tool or local audio playlist tool. The repository name may contain AI music, but user-facing copy should not over-index on AI music as the core category.
 - B 站 is the P0 source for the Alpha path. Other sources may exist as experiments but are not the default public Alpha path.
 - Cached audio is personal to the current user and backend environment. The product does not provide public audio hosting, public sharing of cached files, or cross-user audio file reuse.
 - The system must not accept user cookies or bypass DRM, membership, paid access, login requirements, access controls, or regional restrictions.
@@ -24,6 +25,8 @@ This file records current effective product and architecture decisions. It is no
 ## API And Contracts
 
 - Frontend and API boundaries should use `packages/api-contract`; Web/API should not maintain parallel DTO definitions.
+- Playlist, playlist item, favorite, and me/library responses are persistent API-backed Alpha surfaces. Browser storage may keep tokens, temporary drafts, and player queue state, but published playlists and favorites belong to the API.
+- Favorites in the Mobile Web Alpha are playlist favorites. Content-level favorites can return later as a separate product concept.
 - The formal local audio download path is asset-based: `/api/v1/local-audio/assets/:assetId/download`.
 - The old formal `cacheKey` audio serving route is superseded by the asset download route. `cacheKey` can remain internal metadata but should not be the main download API identity.
 - Cache request and import cache responses should return task/asset identifiers and queued status, not pretend conversion has completed synchronously.

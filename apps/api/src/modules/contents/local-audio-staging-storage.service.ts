@@ -51,6 +51,10 @@ export class LocalAudioStagingStorageService {
     };
   }
 
+  async statRelativePath(relativePath: string) {
+    return stat(this.resolveRelativePath(relativePath));
+  }
+
   createReadStream(relativePath: string, range?: { start: number; end: number }) {
     const absolutePath = this.resolveRelativePath(relativePath);
     return createReadStream(absolutePath, range);

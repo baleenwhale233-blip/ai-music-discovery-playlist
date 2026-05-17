@@ -28,9 +28,12 @@ const samplePlaylists: PublishedPlaylistDetail[] = [
     visibility: "public",
     kind: "music",
     creatorName: "编辑精选",
+    ownerUserId: null,
     sourcePlatforms: ["bilibili"],
     itemCount: 5,
     cachedItemCount: 0,
+    isOwner: false,
+    favoritedByCurrentUser: false,
     isSample: true,
     createdAt: sampleCreatedAt,
     updatedAt: sampleCreatedAt,
@@ -48,6 +51,8 @@ const samplePlaylists: PublishedPlaylistDetail[] = [
         ownerName: "AI Music Lab",
         durationSeconds: 212,
         cacheStatus: "uncached",
+        localAudioAssetId: null,
+        audioUrl: null,
         position: 1
       },
       {
@@ -63,6 +68,8 @@ const samplePlaylists: PublishedPlaylistDetail[] = [
         ownerName: "Vocal Archive",
         durationSeconds: 184,
         cacheStatus: "uncached",
+        localAudioAssetId: null,
+        audioUrl: null,
         position: 2
       }
     ]
@@ -75,9 +82,12 @@ const samplePlaylists: PublishedPlaylistDetail[] = [
     visibility: "public",
     kind: "learning",
     creatorName: "学习播放单",
+    ownerUserId: null,
     sourcePlatforms: ["bilibili"],
     itemCount: 8,
     cachedItemCount: 0,
+    isOwner: false,
+    favoritedByCurrentUser: false,
     isSample: true,
     createdAt: sampleCreatedAt,
     updatedAt: sampleCreatedAt,
@@ -95,6 +105,8 @@ const samplePlaylists: PublishedPlaylistDetail[] = [
         ownerName: "Focus Room",
         durationSeconds: 2700,
         cacheStatus: "uncached",
+        localAudioAssetId: null,
+        audioUrl: null,
         position: 1
       }
     ]
@@ -388,6 +400,8 @@ function buildPublishedFromDraft(draft: PlaylistDraft, now: string): PublishedPl
     ownerName: item.ownerName,
     durationSeconds: item.durationSeconds,
     cacheStatus: item.cacheStatus,
+    localAudioAssetId: null,
+    audioUrl: null,
     position: item.position
   }));
 
@@ -399,9 +413,12 @@ function buildPublishedFromDraft(draft: PlaylistDraft, now: string): PublishedPl
     visibility: draft.visibility,
     kind: "music",
     creatorName: "我",
+    ownerUserId: null,
     sourcePlatforms: ["bilibili"],
     itemCount: items.length,
     cachedItemCount: items.filter((item) => item.cacheStatus === "cached").length,
+    isOwner: true,
+    favoritedByCurrentUser: false,
     isSample: false,
     createdAt: now,
     updatedAt: now,
@@ -438,9 +455,12 @@ function toSummary(playlist: PublishedPlaylistDetail): PublishedPlaylistSummary 
     visibility: normalized.visibility,
     kind: normalized.kind,
     creatorName: normalized.creatorName,
+    ownerUserId: normalized.ownerUserId,
     sourcePlatforms: normalized.sourcePlatforms,
     itemCount: normalized.itemCount,
     cachedItemCount: normalized.cachedItemCount,
+    isOwner: normalized.isOwner,
+    favoritedByCurrentUser: normalized.favoritedByCurrentUser,
     isSample: normalized.isSample,
     createdAt: normalized.createdAt,
     updatedAt: normalized.updatedAt

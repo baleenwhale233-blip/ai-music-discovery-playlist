@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Logger
 } from "@nestjs/common";
+import { ZodError } from "zod";
 
 import { redactSensitiveUrl } from "../http/redact-sensitive-url";
 
@@ -18,26 +19,56 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = context.getResponse();
     const request = context.getRequest();
 
-    const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+    const status = getStatusCode(exception);
+    const message = getResponseMessage(exception);
 
-    const message =
-      exception instanceof HttpException ? exception.message : "Internal server error";
     const redactedUrl = redactSensitiveUrl(request.url);
 
-    if (exception instanceof Error) {
+    if (status >= HttpStatus.INTERNAL_SERVER_ERROR && exception instanceof Error) {
       this.logger.error(`${request.method} ${redactedUrl} -> ${status} ${message}`, exception.stack);
-    } else {
+    } else if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
       this.logger.error(`${request.method} ${redactedUrl} -> ${status} ${message}`);
+    } else {
+      this.logger.warn(`${request.method} ${redactedUrl} -> ${status} ${message}`);
     }
 
     response.status(status).json({
       statusCode: status,
       path: redactedUrl,
       timestamp: new Date().toISOString(),
-      message
+      message,
+      ...(exception instanceof ZodError
+        ? {
+          issues: exception.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message
+          }))
+        }
+        : {})
     });
   }
+}
+
+function getStatusCode(exception: unknown) {
+  if (exception instanceof ZodError) {
+    return HttpStatus.BAD_REQUEST;
+  }
+
+  if (exception instanceof HttpException) {
+    return exception.getStatus();
+  }
+
+  return HttpStatus.INTERNAL_SERVER_ERROR;
+}
+
+function getResponseMessage(exception: unknown) {
+  if (exception instanceof ZodError) {
+    return "Invalid request body";
+  }
+
+  if (exception instanceof HttpException) {
+    return exception.message;
+  }
+
+  return "Internal server error";
 }

@@ -99,12 +99,27 @@ export class LocalAudioService {
       }
     });
     const cacheKey = toSafeCacheKey(`${userId}_${sourceContent.platformContentId}`);
+
+    if (existing?.storageType === "SELF_HOSTED_NODE" && existing.relativeFilePath) {
+      await this.stagingStorage.deleteRelativePath(existing.relativeFilePath);
+    }
+
     const asset = existing
       ? await this.prisma.localAudioAsset.update({
         where: { id: existing.id },
         data: {
           status: "PENDING",
           storageType: "SELF_HOSTED_NODE",
+          relativeFilePath: null,
+          mimeType: null,
+          fileSizeBytes: null,
+          durationSec: null,
+          sha256: null,
+          serverArtifactExpiresAt: null,
+          clientCachedAt: null,
+          serverDeletedAt: null,
+          clientStorageKind: null,
+          clientStorageKey: null,
           lastError: null,
           deletedAt: null
         }
@@ -183,7 +198,7 @@ export class LocalAudioService {
     };
   }
 
-  async getDownloadableAsset(userId: string, assetId: string) {
+  async getDownloadableAssetMetadata(userId: string, assetId: string) {
     const asset = await this.findOwnedAsset(userId, assetId);
 
     if (asset.status !== "READY" || asset.storageType !== "SELF_HOSTED_NODE" || !asset.relativeFilePath) {
@@ -194,24 +209,30 @@ export class LocalAudioService {
       throw new BadRequestException("Local audio staging artifact has expired");
     }
 
-    const stream = await this.stagingStorage.openReadStream(asset.relativeFilePath);
+    const stats = await this.stagingStorage.statRelativePath(asset.relativeFilePath);
 
     return {
-      ...stream,
+      relativeFilePath: asset.relativeFilePath,
       contentType: asset.mimeType ?? "audio/mp4",
-      totalSize: asset.fileSizeBytes ?? stream.totalSize
+      totalSize: asset.fileSizeBytes ?? stats.size
+    };
+  }
+
+  async getDownloadableAsset(userId: string, assetId: string) {
+    const asset = await this.getDownloadableAssetMetadata(userId, assetId);
+
+    return {
+      ...asset,
+      stream: this.stagingStorage.createReadStream(asset.relativeFilePath)
     };
   }
 
   async getDownloadableAssetRange(userId: string, assetId: string, range: { start: number; end: number }) {
-    const asset = await this.getDownloadableAsset(userId, assetId);
+    const asset = await this.getDownloadableAssetMetadata(userId, assetId);
 
     return {
       ...asset,
-      stream: this.stagingStorage.createReadStream(
-        (await this.findOwnedAsset(userId, assetId)).relativeFilePath ?? "",
-        range,
-      )
+      stream: this.stagingStorage.createReadStream(asset.relativeFilePath, range)
     };
   }
 

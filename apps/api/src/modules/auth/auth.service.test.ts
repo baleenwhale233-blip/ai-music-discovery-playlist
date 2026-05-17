@@ -46,4 +46,22 @@ describe("AuthService", () => {
       message: "Database is unavailable. Start local Postgres before logging in."
     });
   });
+
+  it("returns the current alpha user profile", async () => {
+    const service = new AuthService({
+      user: {
+        findUnique: async () => ({
+          id: "user-1",
+          phoneOrEmail: "alpha@example.com",
+          nickname: "alpha"
+        })
+      }
+    } as never);
+
+    await expect(service.getMe("user-1")).resolves.toEqual({
+      id: "user-1",
+      phoneOrEmail: "alpha@example.com",
+      nickname: "alpha"
+    });
+  });
 });

@@ -8,14 +8,14 @@ import type { ImportPreviewItem, ImportPreviewResponse } from "@ai-music-playlis
 import { LoginPrompt } from "../../../components/login-prompt";
 import { buildMediaUrl, getStoredToken, previewImport } from "../../../../lib/api";
 import { createPlaylistRepository } from "../../../../lib/playlist-repository-factory";
-import { visibleSourceOptions, type VisibleSourceId } from "../../../../lib/source-options";
+import { visibleSourceOptions } from "../../../../lib/source-options";
 
 export default function AddPlaylistVideoPage() {
   const router = useRouter();
   const repository = useMemo(() => createPlaylistRepository(), []);
   const [tokenReady, setTokenReady] = useState(false);
   const [sourceUrl, setSourceUrl] = useState("");
-  const [status, setStatus] = useState("粘贴 B 站链接后开始解析。YouTube 先作为实验来源预留。");
+  const [status, setStatus] = useState("粘贴 B 站链接后开始解析。");
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<ImportPreviewResponse | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
@@ -94,7 +94,7 @@ export default function AddPlaylistVideoPage() {
           </div>
           <div>
             <h2>{preview.title || "未命名合集"}</h2>
-            <p><SourceBadge id="bilibili" /> B站</p>
+            <p><SourceBadge /> B站</p>
             <p>共 {preview.items.length} 个条目</p>
             <p>包含来自 B站 的内容</p>
           </div>
@@ -155,7 +155,7 @@ export default function AddPlaylistVideoPage() {
               setSourceUrl(event.target.value);
               setPreview(null);
             }}
-            placeholder="粘贴 YouTube、B站 等链接"
+            placeholder="粘贴 B 站视频、收藏夹、播放列表或合集链接"
             value={sourceUrl}
           />
         </label>
@@ -165,7 +165,7 @@ export default function AddPlaylistVideoPage() {
       <section className="source-chip-grid" aria-label="支持的来源">
         {visibleSourceOptions.map((source) => (
           <div className={source.status === "available" ? "source-chip" : "source-chip muted"} key={source.id}>
-            <SourceBadge id={source.id} />
+            <SourceBadge />
             <span>{source.label}</span>
           </div>
         ))}
@@ -252,11 +252,7 @@ function formatDuration(durationSeconds: number | null) {
   return `${minutes}:${seconds}`;
 }
 
-function SourceBadge(props: { id: VisibleSourceId }) {
-  if (props.id === "youtube") {
-    return <span className="source-badge youtube">▶</span>;
-  }
-
+function SourceBadge() {
   return <span className="source-badge bilibili">B</span>;
 }
 

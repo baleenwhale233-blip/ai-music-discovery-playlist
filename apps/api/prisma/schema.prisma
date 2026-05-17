@@ -125,6 +125,7 @@ model User {
   updatedAt         DateTime                 @updatedAt @map("updated_at")
 
   playlists         Playlist[]
+  playlistFavorites PlaylistFavorite[]
   sourceCollections SourceCollection[]
   favorites         Favorite[]
   playHistory       PlayHistory[]
@@ -249,11 +250,27 @@ model Playlist {
   user               User               @relation(fields: [userId], references: [id])
   sourceCollection   SourceCollection?  @relation(fields: [sourceCollectionId], references: [id])
   items              PlaylistItem[]
+  playlistFavorites  PlaylistFavorite[]
   playHistory        PlayHistory[]
 
   @@index([userId])
   @@index([sourceCollectionId])
   @@map("playlists")
+}
+
+model PlaylistFavorite {
+  id                 String        @id @default(uuid())
+  userId             String        @map("user_id")
+  playlistId         String        @map("playlist_id")
+  createdAt          DateTime      @default(now()) @map("created_at")
+
+  user               User          @relation(fields: [userId], references: [id])
+  playlist           Playlist      @relation(fields: [playlistId], references: [id])
+
+  @@unique([userId, playlistId])
+  @@index([userId, createdAt])
+  @@index([playlistId])
+  @@map("playlist_favorites")
 }
 
 model PlaylistItem {

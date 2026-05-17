@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -153,6 +153,12 @@ class FailingDownloader implements SourceMediaDownloader {
   }
 }
 
+class FailingHashService {
+  async sha256File() {
+    throw new Error("hash exploded");
+  }
+}
+
 class FakeConverter implements AudioConverter {
   async convert(input: { sourcePath: string; outputPath: string }) {
     expect(readFileSync(input.sourcePath, "utf8")).toBe("source-video");
@@ -212,6 +218,41 @@ describe("task-based local audio lifecycle", () => {
     expect(runner.enqueued).toEqual([first.taskId, second.taskId]);
   });
 
+  it("re-cache requests clear old staging metadata and delete stale server artifacts", async () => {
+    const service = new LocalAudioService(prisma as never, staging, new FakeRunner() as never, { workerEnabled: false });
+    const request = await service.requestCache("user-1", { sourceContentId: "content-1" });
+    const source = join(root, "old-ready.m4a");
+    writeFileSync(source, "old audio");
+    const staged = await staging.stageArtifact({
+      assetId: request.assetId,
+      sourcePath: source,
+      extension: ".m4a"
+    });
+    await prisma.localAudioAsset.update({
+      where: { id: request.assetId },
+      data: {
+        status: "READY",
+        storageType: "SELF_HOSTED_NODE",
+        relativeFilePath: staged.relativePath,
+        mimeType: "audio/mp4",
+        fileSizeBytes: statSync(staged.absolutePath).size,
+        durationSec: 42,
+        sha256: await hash.sha256File(staged.absolutePath),
+        serverArtifactExpiresAt: new Date(Date.now() + 1000)
+      }
+    });
+
+    const next = await service.requestCache("user-1", { sourceContentId: "content-1" });
+    const asset = prisma.assets.get(request.assetId);
+
+    expect(next.assetId).toBe(request.assetId);
+    expect(asset?.status).toBe("PENDING");
+    expect(asset?.relativeFilePath).toBeNull();
+    expect(asset?.sha256).toBeNull();
+    expect(asset?.serverArtifactExpiresAt).toBeNull();
+    expect(existsSync(staged.absolutePath)).toBe(false);
+  });
+
   it("runs a successful worker task, stages the final artifact, and deletes temp files", async () => {
     const runner = new FakeRunner();
     const service = new LocalAudioService(prisma as never, staging, runner as never, { workerEnabled: false });
@@ -262,6 +303,27 @@ describe("task-based local audio lifecycle", () => {
     expect(prisma.tasks.get(request.taskId)?.errorMessage).toContain("download exploded");
     expect(prisma.assets.get(request.assetId)?.status).toBe("FAILED");
     expect(existsSync(join(root, "tmp", request.taskId))).toBe(false);
+  });
+
+  it("cleans a staged artifact if the worker fails after moving output to staging", async () => {
+    const service = new LocalAudioService(prisma as never, staging, new FakeRunner() as never, { workerEnabled: false });
+    const request = await service.requestCache("user-1", { sourceContentId: "content-1" });
+    const worker = new LocalAudioWorkerService(
+      prisma as never,
+      temp,
+      staging,
+      new FailingHashService() as never,
+      new FakeDownloader(),
+      new FakeConverter(),
+      { stagingTtlHours: 24 },
+    );
+
+    await worker.runTask(request.taskId);
+
+    const stagingAssetDir = join(root, "staging", request.assetId);
+    expect(prisma.tasks.get(request.taskId)?.status).toBe("FAILED");
+    expect(prisma.assets.get(request.assetId)?.relativeFilePath).toBeNull();
+    expect(existsSync(stagingAssetDir) ? readdirSync(stagingAssetDir) : []).toHaveLength(0);
   });
 
   it("confirms client cache, verifies hash and size, deletes staging, and marks the asset as user-device", async () => {

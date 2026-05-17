@@ -1,5 +1,6 @@
 import { Inject, Injectable, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import type {
+  AuthUser,
   AuthRequestCodeInput,
   AuthVerifyCodeInput,
   AuthVerifyCodeResponse
@@ -78,6 +79,24 @@ export class AuthService {
         phoneOrEmail: user.phoneOrEmail,
         nickname: user.nickname
       }
+    };
+  }
+
+  async getMe(userId: string): Promise<AuthUser> {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        id: userId
+      }
+    });
+
+    if (!user) {
+      throw new UnauthorizedException("Invalid alpha user");
+    }
+
+    return {
+      id: user.id,
+      phoneOrEmail: user.phoneOrEmail,
+      nickname: user.nickname
     };
   }
 

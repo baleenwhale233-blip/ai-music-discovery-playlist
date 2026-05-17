@@ -116,6 +116,13 @@ export interface Playlist {
   isEditorial: boolean;
 }
 
+export interface PlaylistFavorite {
+  id: string;
+  userId: string;
+  playlistId: string;
+  createdAt: string;
+}
+
 export interface PlaylistItem {
   id: string;
   playlistId: string;

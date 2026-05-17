@@ -1,4 +1,4 @@
-export type VisibleSourceId = "bilibili" | "youtube";
+export type VisibleSourceId = "bilibili";
 export type VisibleSourceStatus = "available" | "experimental";
 
 export interface VisibleSourceOption {
@@ -14,11 +14,5 @@ export const visibleSourceOptions: VisibleSourceOption[] = [
     label: "B站",
     helper: "当前可解析",
     status: "available"
-  },
-  {
-    id: "youtube",
-    label: "YouTube",
-    helper: "实验预留",
-    status: "experimental"
   }
 ];

@@ -25,13 +25,13 @@ Applications do not import code directly from other applications. Cross-app shar
 
 ### `apps/web`
 
-Next.js Mobile Web product. It owns Alpha login, playlist listing, playlist creation, source-link add flow, playlist detail, local cache actions, and the player route.
+Next.js Mobile Web product. It owns Alpha login, playlist listing, playlist creation, source-link add flow, playlist detail, owner management, local cache actions, global mini player, and the full player route.
 
 It talks to the backend through `/api/v1` and shared contracts from `packages/api-contract`.
 
 ### `apps/api`
 
-NestJS API. It owns authentication, source parsing, import previews, local audio cache, playlist data, audio Range responses, cover proxying, and health checks.
+NestJS API. It owns authentication, source parsing, import previews, persistent playlist data, playlist favorites, current-user library data, local audio cache, audio Range responses, cover proxying, and health checks.
 
 Current modules include `auth`, `contents`, `imports`, `playlists`, `health`, and platform services for Prisma, Redis, and queues.
 
@@ -67,6 +67,7 @@ Stable cross-app semantics:
 - Account verification statuses: `created`, `pending_user_action`, `pending_check`, `verified`, `rejected`, `expired`, `disputed`.
 - Import candidate cache statuses: `uncached`, `caching`, `cached`, `failed`.
 - Local audio asset statuses: `pending`, `caching`, `ready`, `failed`, `deleted`.
+- Playlist favorite state is current-user specific and belongs to playlist APIs, not content favorite APIs.
 
 Frontend code should use `packages/api-contract` for request and response shapes instead of duplicating DTOs.
 
@@ -93,6 +94,7 @@ The important Alpha relationships are:
 - `SourceContent` stores parsed source metadata.
 - `SourceCollection` and `SourceCollectionItem` store parsed collection candidates.
 - `Playlist` and `PlaylistItem` represent user listening directories.
+- `PlaylistFavorite` represents the current user's collected playlist directories.
 - `LocalAudioAsset` stores the personal cached audio asset for a user and source item.
 - `ConversionTask` tracks cache, delete, refresh, and import work.
 

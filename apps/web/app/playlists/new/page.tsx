@@ -201,7 +201,7 @@ export default function NewPlaylistPage() {
                 <span className="option-icon option-icon-link"><LinkIcon /></span>
                 <span>
                   <strong>从链接添加</strong>
-                  <small>B站、YouTube</small>
+                  <small>B站视频、收藏夹、播放列表或合集</small>
                 </span>
                 <ChevronIcon />
               </Link>

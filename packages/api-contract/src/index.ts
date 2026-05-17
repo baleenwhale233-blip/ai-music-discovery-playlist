@@ -161,6 +161,89 @@ export const importCacheRequestSchema = z.object({
   sourceContentIds: z.array(z.string()).optional()
 });
 
+export const playlistVisibilitySchema = z.enum(["private", "public"]);
+export const playlistSourceTypeSummarySchema = z.enum(["bilibili", "mixed", "manual"]);
+export const playlistItemCacheStatusForCurrentUserSchema = z.enum([
+  "not_cached",
+  "queued",
+  "converting",
+  "cached",
+  "failed"
+]);
+
+export const playlistSummarySchema = z.object({
+  id: z.string(),
+  ownerUserId: z.string(),
+  ownerDisplayName: z.string(),
+  title: z.string(),
+  description: z.string().nullable(),
+  coverUrl: z.string().nullable(),
+  coverItems: z.array(z.string()),
+  visibility: playlistVisibilitySchema,
+  sourceTypeSummary: playlistSourceTypeSummarySchema,
+  itemCount: z.number(),
+  cachedCountForCurrentUser: z.number(),
+  favoritedByCurrentUser: z.boolean(),
+  isOwner: z.boolean(),
+  isEditorial: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const playlistItemSchema = z.object({
+  id: z.string(),
+  playlistId: z.string(),
+  sourcePlatform: z.enum(["bilibili", "youtube_experiment", "other"]),
+  sourceUrl: z.string(),
+  sourceContentId: z.string(),
+  sourceAuthorName: z.string().nullable(),
+  title: z.string(),
+  coverUrl: z.string().nullable(),
+  durationSeconds: z.number().nullable(),
+  orderIndex: z.number(),
+  cacheStatusForCurrentUser: playlistItemCacheStatusForCurrentUserSchema,
+  localAudioAssetIdForCurrentUser: z.string().nullable(),
+  audioUrlForCurrentUser: z.string().nullable(),
+  createdAt: z.string()
+});
+
+export const playlistDetailSchema = playlistSummarySchema.extend({
+  items: z.array(playlistItemSchema)
+});
+
+export const playlistListResponseSchema = z.object({
+  playlists: z.array(playlistSummarySchema)
+});
+
+export const playlistDetailResponseSchema = z.object({
+  playlist: playlistDetailSchema
+});
+
+export const playlistCreateRequestSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().optional(),
+  visibility: playlistVisibilitySchema.default("private")
+});
+
+export const playlistUpdateRequestSchema = z.object({
+  title: z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
+  visibility: playlistVisibilitySchema.optional()
+});
+
+export const playlistItemAddRequestSchema = z.object({
+  sourceContentIds: z.array(z.string().min(1)).min(1)
+});
+
+export const playlistItemReorderRequestSchema = z.object({
+  itemIds: z.array(z.string().min(1)).min(1)
+});
+
+export const playlistFavoriteResponseSchema = z.object({
+  playlistId: z.string(),
+  favoritedByCurrentUser: z.boolean()
+});
+
 export const localAudioAssetStatusSchema = z.enum(["pending", "caching", "ready", "failed", "deleted"]);
 export const localAudioStorageTypeSchema = z.enum(["self_hosted_node", "cloud_temp", "user_device"]);
 export const conversionTaskStatusSchema = z.enum(["created", "queued", "running", "succeeded", "failed", "canceled"]);
@@ -216,6 +299,13 @@ export const localAudioPlaylistItemSchema = experimentalPlaylistItemSchema;
 export const localAudioPlaylistResponseSchema = z.object({
   playlist: localAudioPlaylistSchema,
   items: z.array(localAudioPlaylistItemSchema)
+});
+
+export const meLibraryResponseSchema = z.object({
+  user: authUserSchema,
+  createdPlaylists: z.array(playlistSummarySchema),
+  favoritePlaylists: z.array(playlistSummarySchema),
+  recentLocalAudioItems: z.array(localAudioPlaylistItemSchema)
 });
 
 export const localAudioCacheRequestCreateSchema = z.object({
@@ -279,6 +369,20 @@ export type ImportItemsUpdateResponse = z.infer<typeof importItemsUpdateResponse
 export type ImportCacheRequest = z.infer<typeof importCacheRequestSchema>;
 export type ImportCacheResponse = z.infer<typeof importCacheResponseSchema>;
 export type SourceContentCacheResponse = z.infer<typeof sourceContentCacheResponseSchema>;
+export type PlaylistVisibility = z.infer<typeof playlistVisibilitySchema>;
+export type PlaylistSourceTypeSummary = z.infer<typeof playlistSourceTypeSummarySchema>;
+export type PlaylistItemCacheStatusForCurrentUser = z.infer<typeof playlistItemCacheStatusForCurrentUserSchema>;
+export type PlaylistSummary = z.infer<typeof playlistSummarySchema>;
+export type PlaylistItem = z.infer<typeof playlistItemSchema>;
+export type PlaylistDetail = z.infer<typeof playlistDetailSchema>;
+export type PlaylistListResponse = z.infer<typeof playlistListResponseSchema>;
+export type PlaylistDetailResponse = z.infer<typeof playlistDetailResponseSchema>;
+export type PlaylistCreateRequest = z.infer<typeof playlistCreateRequestSchema>;
+export type PlaylistUpdateRequest = z.infer<typeof playlistUpdateRequestSchema>;
+export type PlaylistItemAddRequest = z.infer<typeof playlistItemAddRequestSchema>;
+export type PlaylistItemReorderRequest = z.infer<typeof playlistItemReorderRequestSchema>;
+export type PlaylistFavoriteResponse = z.infer<typeof playlistFavoriteResponseSchema>;
+export type MeLibraryResponse = z.infer<typeof meLibraryResponseSchema>;
 export type ExperimentalPlaylist = z.infer<typeof experimentalPlaylistSchema>;
 export type ExperimentalPlaylistItem = z.infer<typeof experimentalPlaylistItemSchema>;
 export type ExperimentalPlaylistResponse = z.infer<typeof experimentalPlaylistResponseSchema>;

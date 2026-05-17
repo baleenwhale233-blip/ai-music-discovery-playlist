@@ -50,7 +50,7 @@ export class LocalAudioController {
       status: (code: number) => unknown;
     },
   ) {
-    const audio = await this.localAudioService.getDownloadableAsset(user.userId, assetId);
+    const audio = await this.localAudioService.getDownloadableAssetMetadata(user.userId, assetId);
     const parsedRange = parseHttpRange(rangeHeader, audio.totalSize);
 
     response.setHeader("content-type", audio.contentType);
@@ -78,7 +78,8 @@ export class LocalAudioController {
     }
 
     response.setHeader("content-length", audio.totalSize);
-    return new StreamableFile(audio.stream);
+    const fullAudio = await this.localAudioService.getDownloadableAsset(user.userId, assetId);
+    return new StreamableFile(fullAudio.stream);
   }
 
   @Post("assets/:assetId/confirm-client-cache")

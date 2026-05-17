@@ -17,8 +17,9 @@ Mobile Web Alpha 的导航围绕听单创建、目录管理和本地播放展开
 - `/playlists`: 听单列表和目录入口。
 - `/playlists/new`: 创建或编辑听单草稿。
 - `/playlists/new/add`: 从来源链接添加候选条目。
-- `/playlists/[playlistId]`: 听单详情、条目筛选、缓存操作。
-- `/player/[playlistId]`: 已缓存音频播放器。
+- `/playlists/[playlistId]`: 听单详情、条目筛选、缓存操作、收藏入口。
+- `/playlists/[playlistId]/manage`: owner 管理听单标题、简介和条目。
+- `/player`: 全局完整播放器。
 - `/me`: 我的草稿、已发布目录、本地缓存和账号操作。
 
 根路径 `/` 可以指向 `/playlists` 的同一产品入口。
@@ -32,10 +33,11 @@ Mobile Web Alpha 的导航围绕听单创建、目录管理和本地播放展开
 |   +-- /playlists/new
 |   |   +-- /playlists/new/add
 |   +-- /playlists/[playlistId]
-|       +-- /player/[playlistId]
+|       +-- /playlists/[playlistId]/manage
+|       +-- /player
 +-- /me
     +-- /playlists/new
-    +-- /player/[playlistId]
+    +-- /player
 ```
 
 ## 核心流程
@@ -60,7 +62,8 @@ Mobile Web Alpha 的导航围绕听单创建、目录管理和本地播放展开
 -> 选择可缓存条目
 -> 用户确认缓存
 -> 缓存完成
--> /player/[playlistId]
+-> mini player
+-> /player
 ```
 
 个人管理：
@@ -107,19 +110,30 @@ Mobile Web Alpha 的导航围绕听单创建、目录管理和本地播放展开
 - 展示目录条目。
 - 支持选择可缓存条目。
 - 触发用户主动缓存。
+- 支持收藏或取消收藏。
+- owner 可进入管理页。
 - 提供打开播放器入口。
 
-### `/player/[playlistId]`
+### `/playlists/[playlistId]/manage`
+
+- 仅 owner 可管理。
+- 支持编辑标题和简介。
+- 支持删除条目。
+- 保留添加来源和排序能力的扩展空间。
+
+### `/player`
 
 - 展示当前可播放的本地缓存队列。
 - 使用真实 media element 播放音频。
 - 支持播放、暂停、继续、拖动进度和播放结束后进入下一首。
-- 支持刷新、移除条目和清空本地听单。
+- 支持上一首、下一首、顺序播放、列表循环、单曲循环和随机播放。
+- 队列和底部 mini player 使用同一个播放器状态。
 
 ### `/me`
 
 - 展示草稿数量、已发布数量和已缓存数量。
-- 展示用户发布的听单目录。
+- 展示用户收藏的听单目录。
+- 展示用户创建的听单目录。
 - 展示最近本地缓存。
 - 提供退出登录。
 

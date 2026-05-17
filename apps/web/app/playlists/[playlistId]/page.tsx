@@ -8,13 +8,15 @@ import { BottomNav } from "../../components/bottom-nav";
 import { LoginPrompt } from "../../components/login-prompt";
 import { PageHeader } from "../../components/page-header";
 import { PlaylistItemRow } from "../../components/playlist-item-row";
-import { buildMediaUrl, getStoredToken } from "../../../lib/api";
+import { usePlayer } from "../../components/player-provider";
+import { buildMediaUrl, favoritePlaylist, getStoredToken, unfavoritePlaylist } from "../../../lib/api";
 import type { PublishedPlaylistDetail } from "../../../lib/playlist-domain";
 import { createPlaylistRepository } from "../../../lib/playlist-repository-factory";
 
 export default function PlaylistDetailPage() {
   const params = useParams<{ playlistId: string }>();
   const repository = useMemo(() => createPlaylistRepository(), []);
+  const player = usePlayer();
   const [tokenReady, setTokenReady] = useState(false);
   const [playlist, setPlaylist] = useState<PublishedPlaylistDetail | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -60,6 +62,59 @@ export default function PlaylistDetailPage() {
     }
   }
 
+  async function toggleFavorite() {
+    if (!playlist) {
+      return;
+    }
+
+    setBusy(true);
+
+    try {
+      const result = playlist.favoritedByCurrentUser
+        ? await unfavoritePlaylist(playlist.id)
+        : await favoritePlaylist(playlist.id);
+      setPlaylist({
+        ...playlist,
+        favoritedByCurrentUser: result.favoritedByCurrentUser
+      });
+      setStatus(result.favoritedByCurrentUser ? "已收藏到我的页面。" : "已取消收藏。");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "收藏操作失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function playCached(startItemId?: string) {
+    if (!playlist) {
+      return;
+    }
+
+    const playableItems = playlist.items
+      .filter((item) => item.cacheStatus === "cached" && item.audioUrl)
+      .map((item) => ({
+        id: item.id,
+        playlistId: playlist.id,
+        playlistTitle: playlist.title,
+        title: item.title,
+        artist: item.ownerName,
+        coverUrl: item.coverUrl,
+        audioUrl: item.audioUrl ?? "",
+        durationSeconds: item.durationSeconds
+      }));
+    const startIndex = startItemId
+      ? Math.max(0, playableItems.findIndex((item) => item.id === startItemId))
+      : 0;
+
+    if (playableItems.length === 0) {
+      setStatus("还没有可播放的已缓存条目。");
+      return;
+    }
+
+    player.playQueue(playableItems, startIndex);
+    setStatus("已建立播放队列。");
+  }
+
   if (!tokenReady) {
     return <LoginPrompt />;
   }
@@ -80,13 +135,14 @@ export default function PlaylistDetailPage() {
     .filter((item) => item.collectionId && item.importItemId && item.cacheStatus !== "cached")
     .map((item) => item.id);
   const coverUrl = buildMediaUrl(playlist.coverUrl);
-  const playerHref = `/player/${encodeURIComponent(playlist.id)}`;
+  const playerHref = "/player";
+  const hasPlayableItems = playlist.items.some((item) => item.cacheStatus === "cached" && item.audioUrl);
 
   return (
     <main className="mobile-shell with-bottom-nav">
       <PageHeader
-        actionHref={playerHref}
-        actionLabel="打开播放器"
+        actionHref={playlist.isOwner ? `/playlists/${encodeURIComponent(playlist.id)}/manage` : playerHref}
+        actionLabel={playlist.isOwner ? "管理" : "打开播放器"}
         description={playlist.description || "这是一张目录听单。缓存后才会进入你的真实播放器。"}
         eyebrow={playlist.isSample ? "Sample Directory" : "Published Directory"}
         title={playlist.title}
@@ -120,7 +176,16 @@ export default function PlaylistDetailPage() {
           <button className="secondary" disabled={selectedIds.size === 0 || busy} onClick={() => setSelectedIds(new Set())}>
             取消
           </button>
-          <Link className="button secondary" href={playerHref}>查看本地播放器</Link>
+          <button className="secondary" disabled={busy} onClick={() => void toggleFavorite()} type="button">
+            {playlist.favoritedByCurrentUser ? "取消收藏" : "收藏"}
+          </button>
+          <button className="primary" disabled={!hasPlayableItems} onClick={() => playCached()} type="button">
+            播放已缓存
+          </button>
+          {playlist.isOwner ? (
+            <Link className="button secondary" href={`/playlists/${encodeURIComponent(playlist.id)}/manage`}>管理</Link>
+          ) : null}
+          <Link className="button secondary" href={playerHref}>查看播放器</Link>
         </div>
         <div className="status">{status}</div>
         <div className="item-list">
@@ -144,6 +209,11 @@ export default function PlaylistDetailPage() {
                     return next;
                   });
                 }}
+                actions={item.cacheStatus === "cached" && item.audioUrl ? (
+                  <button className="secondary" onClick={() => playCached(item.id)} type="button">
+                    播放
+                  </button>
+                ) : null}
                 selectable
               />
             );

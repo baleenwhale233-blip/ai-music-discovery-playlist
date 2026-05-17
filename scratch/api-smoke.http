@@ -42,5 +42,5 @@ Content-Type: application/json
 }
 
 ### Get task status
-GET {{baseUrl}}/local-audio/tasks/paste-taskId-here
+GET {{baseUrl}}/local-audio/tasks/1f4f3d8e-061d-4be2-a429-4ef37513a00a
 Authorization: Bearer {{token}}

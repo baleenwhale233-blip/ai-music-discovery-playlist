@@ -185,8 +185,8 @@ describe("local playlist repository", () => {
 });
 
 describe("playlist repository factory", () => {
-  it("uses the local repository by default", async () => {
-    const repository = createPlaylistRepository({ storage: new MemoryStorage() });
+  it("still supports the local repository when configured", async () => {
+    const repository = createPlaylistRepository({ storage: new MemoryStorage(), dataSource: "local" });
 
     const draft = await repository.getActiveDraft();
 

@@ -45,6 +45,8 @@ export interface PublishedPlaylistItem {
   ownerName: string | null;
   durationSeconds: number | null;
   cacheStatus: PlaylistCacheStatus;
+  localAudioAssetId: string | null;
+  audioUrl: string | null;
   position: number;
 }
 
@@ -56,9 +58,12 @@ export interface PublishedPlaylistSummary {
   visibility: PlaylistVisibility;
   kind: PlaylistKind;
   creatorName: string;
+  ownerUserId: string | null;
   sourcePlatforms: Array<"bilibili">;
   itemCount: number;
   cachedItemCount: number;
+  isOwner: boolean;
+  favoritedByCurrentUser: boolean;
   isSample: boolean;
   createdAt: string;
   updatedAt: string;

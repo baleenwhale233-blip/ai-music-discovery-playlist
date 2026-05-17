@@ -11,7 +11,7 @@ export function PlaylistCard({ playlist, featured = false }: { playlist: Publish
         {coverUrl ? <img src={coverUrl} alt="" /> : <div className="cover-fallback">{playlist.title.slice(0, 1)}</div>}
       </div>
       <div className="playlist-card-body">
-        <p className="eyebrow">{playlist.kind === "learning" ? "Learning" : "AI Music"}</p>
+        <p className="eyebrow">{playlist.kind === "learning" ? "Learning" : "Playlist"}</p>
         <h2>{playlist.title}</h2>
         <p>{playlist.description || "发布的是目录元信息，缓存和播放仍由你主动完成。"}</p>
       </div>

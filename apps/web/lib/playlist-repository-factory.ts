@@ -20,5 +20,5 @@ export function createPlaylistRepository(
 }
 
 function getConfiguredDataSource(): PlaylistDataSource {
-  return process.env.NEXT_PUBLIC_PLAYLIST_DATA_SOURCE === "http" ? "http" : "local";
+  return process.env.NEXT_PUBLIC_PLAYLIST_DATA_SOURCE === "local" ? "local" : "http";
 }

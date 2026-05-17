@@ -11,7 +11,14 @@ import {
   localAudioConfirmClientCacheResponseSchema,
   localAudioPlaylistResponseSchema,
   localAudioTaskStatusResponseSchema,
-  modulePrefixes
+  meLibraryResponseSchema,
+  modulePrefixes,
+  playlistCreateRequestSchema,
+  playlistDetailResponseSchema,
+  playlistFavoriteResponseSchema,
+  playlistItemAddRequestSchema,
+  playlistListResponseSchema,
+  playlistUpdateRequestSchema
 } from "./index";
 
 describe("api-contract package", () => {
@@ -114,6 +121,92 @@ describe("api-contract package", () => {
     expect(parsed.totalCount).toBe(123);
     expect(parsed.items[0]?.cacheStatus).toBe("uncached");
     expect(modulePrefixes.imports).toBe("imports");
+  });
+
+  it("keeps the playlist list/detail contracts current-user aware", () => {
+    const list = playlistListResponseSchema.parse({
+      playlists: [
+        {
+          id: "playlist-1",
+          ownerUserId: "user-1",
+          ownerDisplayName: "鲸鱼",
+          title: "视频听单",
+          description: "适合连续收听",
+          coverUrl: null,
+          coverItems: ["https://i0.hdslb.com/cover.jpg"],
+          visibility: "public",
+          sourceTypeSummary: "bilibili",
+          itemCount: 2,
+          cachedCountForCurrentUser: 1,
+          favoritedByCurrentUser: true,
+          isOwner: false,
+          isEditorial: false,
+          createdAt: "2026-05-17T00:00:00.000Z",
+          updatedAt: "2026-05-17T00:00:00.000Z"
+        }
+      ]
+    });
+    const detail = playlistDetailResponseSchema.parse({
+      playlist: {
+        ...list.playlists[0],
+        items: [
+          {
+            id: "item-1",
+            playlistId: "playlist-1",
+            sourcePlatform: "bilibili",
+            sourceUrl: "https://www.bilibili.com/video/BV1B7411m7LV",
+            sourceContentId: "content-1",
+            sourceAuthorName: "UP",
+            title: "Song 1",
+            coverUrl: null,
+            durationSeconds: 120,
+            orderIndex: 1,
+            cacheStatusForCurrentUser: "cached",
+            localAudioAssetIdForCurrentUser: "asset-1",
+            audioUrlForCurrentUser: "/api/v1/local-audio/assets/asset-1/download",
+            createdAt: "2026-05-17T00:00:00.000Z"
+          }
+        ]
+      }
+    });
+
+    expect(list.playlists[0]?.favoritedByCurrentUser).toBe(true);
+    expect(detail.playlist.items[0]?.cacheStatusForCurrentUser).toBe("cached");
+  });
+
+  it("keeps playlist mutation and library contracts", () => {
+    const create = playlistCreateRequestSchema.parse({
+      title: "新听单",
+      description: "从 B 站整理",
+      visibility: "private"
+    });
+    const update = playlistUpdateRequestSchema.parse({
+      title: "公开听单",
+      visibility: "public"
+    });
+    const addItems = playlistItemAddRequestSchema.parse({
+      sourceContentIds: ["content-1", "content-2"]
+    });
+    const favorite = playlistFavoriteResponseSchema.parse({
+      playlistId: "playlist-1",
+      favoritedByCurrentUser: true
+    });
+    const me = meLibraryResponseSchema.parse({
+      user: {
+        id: "user-1",
+        phoneOrEmail: "alpha@example.com",
+        nickname: "alpha"
+      },
+      createdPlaylists: [],
+      favoritePlaylists: [],
+      recentLocalAudioItems: []
+    });
+
+    expect(create.title).toBe("新听单");
+    expect(update.visibility).toBe("public");
+    expect(addItems.sourceContentIds).toHaveLength(2);
+    expect(favorite.favoritedByCurrentUser).toBe(true);
+    expect(me.user.nickname).toBe("alpha");
   });
 
   it("keeps the formal local audio playlist response contract", () => {

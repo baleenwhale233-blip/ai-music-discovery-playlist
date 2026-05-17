@@ -216,6 +216,7 @@ export class LocalAudioWorkerService {
     });
 
     const temp = await this.tempStorage.createTaskDir(taskId);
+    let stagedRelativePath: string | null = null;
 
     try {
       const sourceContent = await this.prisma.sourceContent.findUnique({
@@ -248,6 +249,7 @@ export class LocalAudioWorkerService {
         sourcePath: converted.outputPath,
         extension: extname(converted.outputPath) || ".m4a"
       });
+      stagedRelativePath = staged.relativePath;
       const stats = await stat(staged.absolutePath);
       const sha256 = await this.fileHash.sha256File(staged.absolutePath);
       const expiresAt = new Date(Date.now() + this.options.stagingTtlHours * 60 * 60 * 1000);
@@ -281,6 +283,11 @@ export class LocalAudioWorkerService {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Local audio conversion failed";
+
+      if (stagedRelativePath) {
+        await this.stagingStorage.deleteRelativePath(stagedRelativePath).catch(() => undefined);
+      }
+
       await this.prisma.localAudioAsset.update({
         where: { id: task.localAudioAssetId },
         data: {

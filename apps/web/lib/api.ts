@@ -2,7 +2,14 @@ import type {
   AuthVerifyCodeResponse,
   ImportCacheResponse,
   ImportPreviewResponse,
-  LocalAudioPlaylistResponse
+  LocalAudioCacheRequestCreateResponse,
+  LocalAudioPlaylistResponse,
+  MeLibraryResponse,
+  PlaylistCreateRequest,
+  PlaylistDetailResponse,
+  PlaylistItemAddRequest,
+  PlaylistListResponse,
+  PlaylistUpdateRequest
 } from "@ai-music-playlist/api-contract";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:4000/api/v1";
@@ -141,6 +148,77 @@ export function previewImport(input: { url: string; limit?: number }) {
   });
 }
 
+export function getCurrentUser() {
+  return requestJson<AuthVerifyCodeResponse["user"]>("/auth/me");
+}
+
+export function listPlaylists() {
+  return requestJson<PlaylistListResponse>("/playlists");
+}
+
+export function createPlaylist(input: PlaylistCreateRequest) {
+  return requestJson<PlaylistDetailResponse>("/playlists", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function getPlaylist(playlistId: string) {
+  return requestJson<PlaylistDetailResponse>(`/playlists/${encodeURIComponent(playlistId)}`);
+}
+
+export function updatePlaylist(playlistId: string, input: PlaylistUpdateRequest) {
+  return requestJson<PlaylistDetailResponse>(`/playlists/${encodeURIComponent(playlistId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+}
+
+export function addPlaylistItems(playlistId: string, input: PlaylistItemAddRequest) {
+  return requestJson<PlaylistDetailResponse>(`/playlists/${encodeURIComponent(playlistId)}/items`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function deletePlaylistItemFromPlaylist(playlistId: string, itemId: string) {
+  return requestJson<PlaylistDetailResponse>(
+    `/playlists/${encodeURIComponent(playlistId)}/items/${encodeURIComponent(itemId)}`,
+    {
+      method: "DELETE"
+    },
+  );
+}
+
+export function reorderPlaylistItems(playlistId: string, itemIds: string[]) {
+  return requestJson<PlaylistDetailResponse>(`/playlists/${encodeURIComponent(playlistId)}/items/reorder`, {
+    method: "PATCH",
+    body: JSON.stringify({ itemIds })
+  });
+}
+
+export function favoritePlaylist(playlistId: string) {
+  return requestJson<{ playlistId: string; favoritedByCurrentUser: boolean }>(
+    `/playlists/${encodeURIComponent(playlistId)}/favorite`,
+    {
+      method: "POST"
+    },
+  );
+}
+
+export function unfavoritePlaylist(playlistId: string) {
+  return requestJson<{ playlistId: string; favoritedByCurrentUser: boolean }>(
+    `/playlists/${encodeURIComponent(playlistId)}/favorite`,
+    {
+      method: "DELETE"
+    },
+  );
+}
+
+export function getMeLibrary() {
+  return requestJson<MeLibraryResponse>("/me");
+}
+
 export function cacheImportItems(input: { collectionId: string; itemIds: string[] }) {
   return requestJson<ImportCacheResponse>(`/imports/${encodeURIComponent(input.collectionId)}/cache`, {
     method: "POST",
@@ -152,6 +230,17 @@ export function cacheImportItems(input: { collectionId: string; itemIds: string[
 
 export function getLocalAudioPlaylist() {
   return requestJson<LocalAudioPlaylistResponse>("/playlists/local-audio");
+}
+
+export function requestLocalAudioCache(input: {
+  sourceContentId: string;
+  playlistId?: string;
+  playlistItemId?: string;
+}) {
+  return requestJson<LocalAudioCacheRequestCreateResponse>("/local-audio/cache-requests", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }
 
 export function deletePlaylistItem(playlistItemId: string) {
